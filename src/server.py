@@ -225,7 +225,7 @@ async def control(req: ControlRequest):
         sim.is_playing = True
     elif action == "seek" and req.value is not None:
         sample_idx = int(req.value)
-        sim.twin.cell.seek(sample_idx)
+        sim.twin.seek(sample_idx)
     elif action == "speed" and req.value is not None:
         sim.speed_multiplier = float(req.value)
     elif action == "select_cycle" and req.value is not None:

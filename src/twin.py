@@ -81,7 +81,12 @@ class DigitalTwin:
         if self.capacity_as <= 0.0:
             self.capacity_as = 2.6 * 3600.0 # fallback nominal 2.6 Ah
             
-        initial_soc = float(cycle_df["soc_true"].iloc[0])
+        initial_soc = 100.0
+        if len(cycle_df) > 0:
+            if "soc_true" in cycle_df.columns and not pd.isna(cycle_df["soc_true"].iloc[0]):
+                initial_soc = float(cycle_df["soc_true"].iloc[0])
+            elif "soc_ml" in cycle_df.columns and not pd.isna(cycle_df["soc_ml"].iloc[0]):
+                initial_soc = float(cycle_df["soc_ml"].iloc[0])
         self.cc_true_soc = initial_soc
         self.cc_biased_soc = initial_soc
         self.cc_wrong_soc = min(100.0, max(0.0, initial_soc - 10.0)) # 10% offset
@@ -112,15 +117,17 @@ class DigitalTwin:
         """Reset all hardware components and estimators."""
         self.cell.reset()
         self.firmware.reset()
-        initial_i = float(self.cell.df["I"].iloc[0]) if len(self.cell.df) > 0 else 0.0
-        if initial_i < -0.05:
-            self.tp4056.current_state = TP4056State.CHARGING
-            self.tp4056._target_state = TP4056State.CHARGING
-        else:
-            self.tp4056.current_state = TP4056State.DISCHARGING
-            self.tp4056._target_state = TP4056State.DISCHARGING
-        self.tp4056._debounce_count = 0
-        initial_soc = float(self.cell.df["soc_true"].iloc[0])
+        initial_i = float(self.cell.df["I"].iloc[0]) if len(self.cell.df) > 0 and "I" in self.cell.df.columns else 0.0
+        init_state = TP4056State.CHARGING if initial_i < -0.05 else TP4056State.DISCHARGING
+        self.tp4056.reset(initial_state=init_state)
+
+        initial_soc = 100.0
+        if len(self.cell.df) > 0:
+            if "soc_true" in self.cell.df.columns and not pd.isna(self.cell.df["soc_true"].iloc[0]):
+                initial_soc = float(self.cell.df["soc_true"].iloc[0])
+            elif "soc_ml" in self.cell.df.columns and not pd.isna(self.cell.df["soc_ml"].iloc[0]):
+                initial_soc = float(self.cell.df["soc_ml"].iloc[0])
+
         self.cc_biased_soc = initial_soc
         self.cc_wrong_soc = min(100.0, max(0.0, initial_soc - 10.0))
         self.ekf.reset(initial_soc=initial_soc / 100.0)
@@ -133,6 +140,31 @@ class DigitalTwin:
         self.history_cc_soc.clear()
         self.history_cc_wrong_soc.clear()
         self.history_soh.clear()
+
+    def seek(self, sample_idx: int) -> None:
+        """Seek simulation to a specific sample index, synchronizing all estimators."""
+        self.cell.seek(sample_idx)
+        cursor = self.cell.cursor
+        if len(self.cell.df) > 0 and cursor < len(self.cell.df):
+            row = self.cell.df.iloc[cursor]
+            target_soc = float(row.get("soc_true", row.get("soc_ml", 100.0)))
+            current_i = float(row.get("I", 0.0))
+        else:
+            target_soc = 100.0
+            current_i = 0.0
+
+        if pd.isna(target_soc):
+            target_soc = 100.0
+
+        self.firmware.reset()
+        init_state = TP4056State.CHARGING if current_i < -0.05 else TP4056State.DISCHARGING
+        self.tp4056.reset(initial_state=init_state)
+
+        self.cc_biased_soc = target_soc
+        self.cc_wrong_soc = min(100.0, max(0.0, target_soc - 10.0))
+        self.ekf.reset(initial_soc=target_soc / 100.0)
+        self.spkf.reset(initial_soc=target_soc / 100.0)
+        self.soh.reset()
         
     def step(self) -> Dict[str, Any]:
         """Execute one 5-second sample through the hardware chain."""

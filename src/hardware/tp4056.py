@@ -12,6 +12,7 @@ Models the physical TP4056 charge management IC:
     * Debounce counter preventing chatter near transition thresholds
 """
 
+import math
 from enum import Enum
 from typing import Dict, Any
 
@@ -40,9 +41,22 @@ class TP4056:
         self.current_state = TP4056State.DISCHARGING
         self._target_state = TP4056State.DISCHARGING
         self._debounce_count = 0
+
+    def reset(self, initial_state: TP4056State = TP4056State.DISCHARGING) -> None:
+        """Reset internal state machine and debounce counters."""
+        self.current_state = initial_state
+        self._target_state = initial_state
+        self._debounce_count = 0
         
     def step(self, v_cell: float, i_cell: float) -> Dict[str, Any]:
         """Evaluate state machine transitions on voltage and current samples."""
+        if v_cell is None or i_cell is None or math.isnan(v_cell) or math.isnan(i_cell):
+            return {
+                "status": self.current_state.value,
+                "led_chrg": (self.current_state == TP4056State.CHARGING),
+                "led_stdby": (self.current_state == TP4056State.CHARGED_STANDBY),
+            }
+
         # Discharge positive convention:
         # i_cell > 0.05: discharging
         # i_cell < -0.05: charging
@@ -57,11 +71,9 @@ class TP4056:
             else:
                 raw_next_state = TP4056State.CHARGING
         else:
-            # Low / zero current:
-            # If cell was already charging or charged, stay in CHARGED_STANDBY (do not spuriously discharge)
-            if self.current_state in (TP4056State.CHARGING, TP4056State.CHARGED_STANDBY):
-                raw_next_state = TP4056State.CHARGED_STANDBY
-            elif v_cell >= 4.15:
+            # Low / zero current (|I| <= 0.05 A):
+            # If cell voltage is at full charge (>= 4.15V) or maintaining charged standby (>= 4.10V)
+            if v_cell >= 4.15 or (self.current_state == TP4056State.CHARGED_STANDBY and v_cell >= 4.10):
                 raw_next_state = TP4056State.CHARGED_STANDBY
             else:
                 raw_next_state = TP4056State.DISCHARGING

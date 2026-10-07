@@ -85,8 +85,8 @@ def run_excel_test(file_path: str, export_path: str = None, plot_path: str = Non
         print(f"  • Maximum Absolute Error    : {max_err:.2f} %")
         print(f"  • Coulomb Counting MAE      : {stats.get('cc_mae', 'N/A')} %")
 
-    print(f"\n--- SAMPLES TABLE: ALL {len(preview)} SAMPLES ---")
     preview = result["preview"]
+    print(f"\n--- SAMPLES TABLE: ALL {len(preview)} SAMPLES ---")
     header = f"{'Row':<6}{'Time(s)':<10}{'Volt(V)':<10}{'Curr(A)':<10}{'V_smooth':<10}{'Pred_SOC(%)':<14}{'True_SOC(%)':<12}"
     print(header)
     print("-" * len(header))

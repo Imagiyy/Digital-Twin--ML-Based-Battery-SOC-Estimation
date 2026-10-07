@@ -249,3 +249,23 @@ def test_api_upload_file_multipart(client):
     assert len(res_data["series"]["predicted_soc"]) == 45
 
 
+def test_mv_ma_and_fractional_soc_autoconversion():
+    """Verify auto-conversion of millivolts, milliamps, and fractional 0-1 SOC."""
+    csv_data = """Time,Voltage_mV,Current_mA,State_of_Charge
+0,3800,1000,0.85
+1,3790,1000,0.84
+2,3780,1000,0.83
+3,3770,1000,0.82
+4,3760,1000,0.81
+"""
+    res = parse_and_predict_custom_data(csv_data, filename="test_mv_ma.csv")
+    assert res["status"] == "success"
+    # Voltage auto-scaled from 3800 mV to 3.8 V
+    assert 3.7 < res["stats"]["v_max"] < 3.9
+    # Current auto-scaled from 1000 mA to 1.0 A
+    assert 0.9 < res["stats"]["i_mean"] < 1.1
+    # Ground truth SOC auto-scaled from 0.85 to 85.0%
+    assert res["df_processed"]["soc_true"].iloc[0] == 85.0
+    assert res["series"]["true_soc"][0] == 85.0
+
+

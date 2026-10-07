@@ -42,10 +42,10 @@ class CellTwin:
                 
         return {
             "index": int(row.name if hasattr(row, "name") else self.cursor - 1),
-            "time_s": float(row["time_s"]),
-            "v_true": float(row["V"]),
-            "i_true": float(row["I"]),
-            "soc_true": float(row["soc_true"]),
-            "temperature_c": float(row["temperature_c"]),
+            "time_s": float(row.get("time_s", (self.cursor - 1) * 5.0)),
+            "v_true": float(row.get("V", 3.7)),
+            "i_true": float(row.get("I", 0.0)),
+            "soc_true": float(row.get("soc_true", row.get("soc_ml", 100.0))),
+            "temperature_c": float(row.get("temperature_c", 25.0)),
             "is_done": self.is_done,
         }

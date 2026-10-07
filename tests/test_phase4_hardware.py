@@ -69,6 +69,16 @@ def test_tp4056_state_machine_and_leds():
     assert res["led_chrg"] is False
     assert res["led_stdby"] is True
 
+    # 4. NaN input immunity (holds state safely)
+    res_nan = tp.step(v_cell=float("nan"), i_cell=float("nan"))
+    assert res_nan["status"] == TP4056State.CHARGED_STANDBY.value
+    assert res_nan["led_stdby"] is True
+
+    # 5. Reset functionality
+    tp.reset(initial_state=TP4056State.DISCHARGING)
+    assert tp.current_state == TP4056State.DISCHARGING
+    assert tp._debounce_count == 0
+
 
 def test_wifi_payload_structure():
     """Verify standard Wi-Fi payload schema emitted by virtual firmware."""

@@ -29,11 +29,11 @@ PREDEFINED_DEFAULT_COLUMNS = ["Time", "Voltage", "Current"]
 OPTIONAL_COLUMNS = ["Temperature", "SOC_True"]
 
 COLUMN_ALIASES = {
-    "voltage": ["voltage", "v", "vbat", "v_cell", "cell_voltage", "volt", "volts"],
-    "current": ["current", "i", "amps", "curr", "amp", "current (a)"],
-    "time": ["time", "time_s", "time (s)", "t", "timestamp", "seconds", "sec"],
-    "temperature": ["temperature", "temp", "temperature_c", "temp_c", "degc", "t_c"],
-    "soc": ["soc", "soc_true", "true_soc", "soc (%)", "state_of_charge", "actual_soc"],
+    "voltage": ["voltage", "v", "vbat", "v_cell", "cell_voltage", "volt", "volts", "voltage_mv", "voltage (v)", "voltage (mv)"],
+    "current": ["current", "i", "amps", "curr", "amp", "current (a)", "current_a", "current_ma", "current (ma)", "i (a)", "i (ma)", "load_current"],
+    "time": ["time", "time_s", "time (s)", "t", "timestamp", "seconds", "sec", "time_seconds"],
+    "temperature": ["temperature", "temp", "temperature_c", "temp_c", "degc", "t_c", "temperature (c)"],
+    "soc": ["soc", "soc_true", "true_soc", "soc (%)", "state_of_charge", "actual_soc", "soc_ref"],
 }
 
 
@@ -201,6 +201,12 @@ def parse_and_predict_custom_data(
         if candidate in col_map:
             i_col = col_map[candidate]
             break
+    if i_col is None:
+        # Fuzzy match for current column
+        for k, orig in col_map.items():
+            if "curr" in k or "amp" in k or k.startswith("i_") or k.endswith("_i") or k.endswith("_a") or k.endswith("_ma"):
+                i_col = orig
+                break
     if i_col is not None:
         i_col_name = i_col
         i_arr = pd.to_numeric(df_raw[i_col], errors="coerce").fillna(0.0).to_numpy(dtype=float)
@@ -261,6 +267,20 @@ def parse_and_predict_custom_data(
     n_samples = len(v_arr)
     if n_samples == 0:
         raise ValueError("No valid numeric voltage samples found in dataset.")
+
+    # Auto-convert millivolts to volts if detected (e.g. median > 50 V indicates typical 3000-4200 mV)
+    if np.nanmedian(v_arr) > 50.0:
+        v_arr = v_arr / 1000.0
+
+    # Auto-convert milliamps to amps if detected (column named mA or median magnitude > 50 A)
+    if "ma" in i_col_name.lower() or (np.nanmedian(np.abs(i_arr)) > 50.0 and np.nanmedian(np.abs(i_arr)) < 50000.0):
+        i_arr = i_arr / 1000.0
+
+    # Auto-convert fractional SOC (0.0 - 1.0) to percentage (0 - 100%)
+    if has_ground_truth and soc_true_arr is not None:
+        max_gt = np.nanmax(soc_true_arr)
+        if 0.0 < max_gt <= 1.0:
+            soc_true_arr = soc_true_arr * 100.0
 
     # Calculate sampling dt (median delta)
     if n_samples > 1:

@@ -39,6 +39,10 @@ def test_control_and_params_endpoints(client):
     assert res_ctrl.status_code == 200
     assert res_ctrl.json()["is_playing"] is False
     
+    # Control: seek
+    res_seek = client.post("/api/control", json={"action": "seek", "value": 100})
+    assert res_seek.status_code == 200
+
     # Params: update noise and offset
     res_param = client.post("/api/params", json={"noise_mv": 8.0, "offset_ma": 40.0})
     assert res_param.status_code == 200
