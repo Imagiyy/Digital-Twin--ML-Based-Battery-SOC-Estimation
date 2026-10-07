@@ -1,0 +1,104 @@
+# Configuration for ML SOC Estimation Digital Twin
+# All tunables are kept here without magic numbers
+
+project:
+  name: "SOC-Digital-Twin"
+  version: "1.0.0"
+  random_seed: 42
+
+paths:
+  raw_dir: "data/raw"
+  discharge_dir: "data/raw/Discharge_folder"
+  charge_dir: "data/raw/Load_folder"
+  processed_dir: "data/processed"
+  models_dir: "models"
+  report_dir: "report"
+  figures_dir: "report/figures"
+  tables_dir: "report/tables"
+  firmware_dir: "firmware"
+
+dataset:
+  delimiter: ";"
+  columns:
+    time: "Time"
+    current: "Current"
+    temperature: "Temperature"
+    vbat1: "Vbat1"
+    vbat2: "Vbat2"
+    vbat3: "Vbat3"
+    vbat4: "Vbat4"
+  sampling_interval_s: 5.0
+  resample_method: "linear" # options: "linear", "bin_average"
+  discharge_positive_current: true
+  features: ["V", "I", "V_smooth"]
+  smooth_window_s: 60.0
+  smooth_samples: 12 # 60s / 5s
+
+split:
+  held_out_discharge_files:
+    - "Discharge_02.csv"
+  held_out_pairs:
+    - name: "pair10"
+      rate_a: 1.0
+      discharge: "Discharge_10.csv"
+      charge: "Load_10.csv"
+    - name: "pair20"
+      rate_a: 2.0
+      discharge: "Discharge_20.csv"
+      charge: "Load_20.csv"
+    - name: "pair30"
+      rate_a: 3.0
+      discharge: "Discharge_30.csv"
+      charge: "Load_30.csv"
+  val_files:
+    - "Discharge_05.csv"
+    - "Discharge_15.csv"
+    - "Discharge_25.csv"
+    - "Load_5.csv"
+    - "Load_15.csv"
+    - "Load_25.csv"
+
+model:
+  name: "mlp_3_16_1"
+  input_dim: 3
+  hidden_dim: 16
+  output_dim: 1
+  activation: "tanh"
+  clip_range: [0.0, 100.0]
+  total_params: 81 # 3*16 + 16 + 16*1 + 1
+
+training:
+  epochs: 80
+  batch_size: 1024
+  learning_rate: 0.001
+  loss: "mse" # options: "mse", "huber"
+  patience: 15
+  random_seed: 42
+  noise_augmentation:
+    enabled: true
+    voltage_noise_sigma_mv_max: 10.0
+    voltage_noise_sigma_mv_default: 5.0
+    current_offset_ma_max: 50.0
+    current_offset_ma_default: 30.0
+    quantize_adc: true
+
+hardware:
+  voltage_divider:
+    ratio: 0.5
+    tolerance: 0.0
+  esp32_adc:
+    resolution_bits: 12
+    vref: 3.3
+    noise_sigma_mv: 5.0
+  current_sensor:
+    offset_ma: 30.0
+    noise_sigma_ma: 0.0
+  tp4056:
+    cv_voltage_threshold: 4.18
+    termination_current_a: 0.10
+    debounce_samples: 3
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  ws_stream_interval_s: 0.05

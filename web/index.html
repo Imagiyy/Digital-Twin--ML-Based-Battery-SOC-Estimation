@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Twin: ML-Based Battery SOC Estimation</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/vendor/chart.umd.min.js"></script>
+</head>
+<body>
+  <!-- Header Banner -->
+  <header>
+    <div class="brand">
+      <h1>
+        <span style="display:inline-block;width:12px;height:12px;background:var(--ac);border-radius:2px;"></span>
+        Digital Twin: ML-Based Battery SOC Estimation
+      </h1>
+      <div class="sub">Virtual ESP32 + TP4056 + 18650 Li-ion Cell &middot; Amrita School of Engineering, EEE</div>
+    </div>
+    <div class="header-actions">
+      <span class="pill" id="cycle-badge">Held-Out NASA Cycle</span>
+      <span class="latency-badge" id="latency-badge">Latency: -- ms</span>
+      <button id="theme-btn" style="background:var(--bg);color:var(--fg);border:1px solid var(--bd);padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer;">🌓 Theme</button>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="tab-nav">
+    <button class="active" data-tab="tab-live">1. Live Twin</button>
+    <button data-tab="tab-eval">2. Evaluation</button>
+    <button data-tab="tab-model">3. Model Explorer</button>
+    <button data-tab="tab-data">4. Data Explorer</button>
+    <button data-tab="tab-custom">5. Custom Import &amp; Predict</button>
+    <button data-tab="tab-about">6. About</button>
+  </nav>
+
+  <!-- Main Content Areas -->
+  <main>
+    <!-- =====================================================================
+         TAB 1: LIVE TWIN
+         ===================================================================== -->
+    <div class="tab-pane active" id="tab-live">
+      <!-- Upper Section: Twin Output & Virtual Hardware Chain -->
+      <div class="grid-2">
+        <!-- Card 1: Web Dashboard (Twin Output) -->
+        <section class="card">
+          <h2>Web Dashboard (Twin Output)</h2>
+          <div class="gauge-container">
+            <!-- Animated SVG Ring -->
+            <svg class="soc-ring-svg" viewBox="0 0 170 170">
+              <circle cx="85" cy="85" r="70" fill="none" stroke="var(--bd)" stroke-width="14" />
+              <circle id="soc-arc" cx="85" cy="85" r="70" fill="none" stroke="var(--ok)" stroke-width="14" stroke-linecap="round" stroke-dasharray="439.8" stroke-dashoffset="0" transform="rotate(-90 85 85)" />
+              <text id="val-soc-ring" x="85" y="88" text-anchor="middle" font-size="34" font-weight="700" fill="var(--fg)">--</text>
+              <text x="85" y="110" text-anchor="middle" font-size="11" fill="var(--mut)">SOC (ML)</text>
+            </svg>
+
+            <!-- Key Metric Values -->
+            <div>
+              <div class="kv-table">
+                <span>Voltage</span><b id="val-cell-v">-- V</b>
+                <span>Current</span><b id="val-cell-i">-- A</b>
+                <span>Status</span><b id="val-status" style="color:var(--wn);">--</b>
+              </div>
+              <div class="led-group">
+                <span><i class="led-indicator" id="led-chrg"></i>CHRG</span>
+                <span><i class="led-indicator" id="led-stdby"></i>STDBY</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Wi-Fi Payload Box -->
+          <div class="payload-box">
+            <button class="btn-copy" id="btn-copy-payload">Copy</button>
+            <span style="font-size:11px;color:var(--mut);display:block;margin-bottom:4px;">Wi-Fi JSON Payload (ESP32 telemetry stream)</span>
+            <pre id="val-wifi-json">{}</pre>
+          </div>
+
+          <!-- SOH (State of Health) Monitoring Widget -->
+          <div class="soh-widget">
+            <div class="soh-header">
+              <span style="font-weight:700;font-size:12px;color:var(--fg);display:flex;align-items:center;gap:6px;">
+                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);"></span>
+                State of Health (SOH Dual Aging)
+              </span>
+              <span class="soh-badge" id="val-soh-status">EXCELLENT</span>
+            </div>
+
+            <div class="soh-metric-row">
+              <div class="soh-metric-box">
+                <span class="label">Overall SOH</span>
+                <span class="val" id="val-soh-combined" style="color:var(--ok);">-- %</span>
+              </div>
+              <div class="soh-metric-box">
+                <span class="label">Est. R0 / RUL</span>
+                <span class="val" id="val-soh-r0-rul">-- m&Omega; &middot; -- cyc</span>
+              </div>
+            </div>
+
+            <div class="soh-bars">
+              <div class="soh-bar-item">
+                <div class="soh-bar-label">
+                  <span>Capacity Fade (SOH<sub>C</sub>)</span>
+                  <b id="val-soh-cap">-- %</b>
+                </div>
+                <div class="soh-bar-track">
+                  <div class="soh-bar-fill" id="bar-soh-cap" style="width:100%;background:var(--ok);"></div>
+                </div>
+              </div>
+              <div class="soh-bar-item">
+                <div class="soh-bar-label">
+                  <span>Resistance Fade (SOH<sub>R</sub>)</span>
+                  <b id="val-soh-res">-- %</b>
+                </div>
+                <div class="soh-bar-track">
+                  <div class="soh-bar-fill" id="bar-soh-res" style="width:100%;background:var(--bl);"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Card 2: Virtual Hardware Chain & Accuracy Metrics -->
+        <section class="card">
+          <h2>Virtual Hardware Chain</h2>
+          <div class="hardware-flow">
+            <div class="flow-box">Cell Twin<span class="val" id="flow-v-cell">-- V</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-box">Divider &divide;2<span class="val" id="flow-v-pin">-- V</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-box">ESP32 ADC<span class="val" id="flow-adc-code">--</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-box">ML Model<span class="val" id="flow-soc-ml">-- %</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-box" style="border-color:var(--ok);">Web UI<span class="val" style="color:var(--ok);">LIVE</span></div>
+          </div>
+
+          <h2 style="margin-top:16px;">Accuracy Metrics (Running)</h2>
+          <div class="kv-table">
+            <span>ML MAE</span><b id="m-ml-mae">--</b>
+            <span>SPKF MAE</span><b id="m-spkf-mae" style="color:#8b5cf6;">--</b>
+            <span>EKF MAE</span><b id="m-ekf-mae" style="color:#06b6d4;">--</b>
+            <span>Coulomb Counting MAE (Biased Sensor)</span><b id="m-cc-mae">--</b>
+            <span>Inference Time (Single-Sample)</span><b id="m-infer-time">-- &mu;s</b>
+            <span>Target Error</span><b style="color:var(--ok);">&lt; 2-3 %</b>
+          </div>
+          <p style="font-size:11px;color:var(--mut);margin-top:10px;">
+            MLP 3-16-1 (81 params) &middot; EKF/SPKF 1-RC ECM &middot; Dual SOH (Capacity &amp; Resistance Fade) &middot; Fixed 7 held-out test cycles.
+          </p>
+        </section>
+      </div>
+
+      <!-- Live Interactive Controls -->
+      <section class="controls-panel">
+        <button id="btn-play-pause">Pause</button>
+        <button id="btn-restart">Restart Twin</button>
+
+        <div class="ctl-group">
+          <label>Cycle Selector</label>
+          <select id="sel-cycle">
+            <option value="pair10" selected>Cycle @ 1.0 A: Discharge 10 + Charge 10 (Held-out)</option>
+            <option value="pair20">Cycle @ 2.0 A: Discharge 20 + Charge 20 (Held-out)</option>
+            <option value="pair30">Cycle @ 3.0 A: Discharge 30 + Charge 30 (Held-out)</option>
+            <option value="dis02">Discharge 02 @ 0.5 A (Held-out)</option>
+          </select>
+        </div>
+
+        <div class="ctl-group">
+          <label>Speed Multiplier</label>
+          <select id="sel-speed">
+            <option value="1">1x (Real-time)</option>
+            <option value="5">5x</option>
+            <option value="10" selected>10x</option>
+            <option value="50">50x</option>
+            <option value="100">100x</option>
+          </select>
+        </div>
+
+        <div class="ctl-group">
+          <label>ADC Noise: <span id="lbl-noise">5</span> mV</label>
+          <input type="range" id="rng-noise" min="0" max="30" value="5" step="1">
+        </div>
+
+        <div class="ctl-group">
+          <label>Current Offset: <span id="lbl-offset">30</span> mA</label>
+          <input type="range" id="rng-offset" min="-100" max="100" value="30" step="5">
+        </div>
+
+        <div class="ctl-group">
+          <label>ADC Resolution</label>
+          <select id="sel-adc-bits">
+            <option value="8">8-bit</option>
+            <option value="10">10-bit</option>
+            <option value="12" selected>12-bit (ESP32)</option>
+            <option value="14">14-bit</option>
+            <option value="16">16-bit</option>
+          </select>
+        </div>
+
+        <button id="btn-export-csv" style="background:var(--mut);">Export CSV</button>
+      </section>
+
+      <!-- Live Plots -->
+      <section class="card chart-card">
+        <h2>State of Charge Tracking (Live)</h2>
+        <div class="chart-legend">
+          <span><i class="legend-line" style="background:#1f2937;"></i>True SOC (Reference)</span>
+          <span><i class="legend-line" style="background:#16a34a;"></i>ML Estimate</span>
+          <span><i class="legend-line" style="background:#8b5cf6;"></i>SPKF Estimate</span>
+          <span><i class="legend-line" style="background:#06b6d4;"></i>EKF Estimate</span>
+          <span><i class="legend-line" style="background:#dc2626;"></i>Coulomb Counting (Biased Sensor)</span>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="chart-soc"></canvas>
+        </div>
+      </section>
+
+      <div class="grid-2">
+        <section class="card chart-card">
+          <h2>Estimation Error (% Points)</h2>
+          <div class="chart-wrapper">
+            <canvas id="chart-error"></canvas>
+          </div>
+        </section>
+
+        <section class="card chart-card">
+          <h2>Cell Voltage & Current vs Time</h2>
+          <div class="chart-wrapper">
+            <canvas id="chart-vi"></canvas>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         TAB 2: EVALUATION
+         ===================================================================== -->
+    <div class="tab-pane" id="tab-eval">
+      <!-- Section A: Algorithm Recommendation Engine & Synthesis -->
+      <section class="algo-recommendation-banner">
+        <div class="algo-rec-header">
+          <div class="algo-rec-title">
+            <span style="font-size:20px;">🏆</span>
+            Algorithm Recommendation Engine: Best Algorithm for Embedded BMS
+          </div>
+          <span class="algo-winner-pill">TOP RANKED: MLP 3-16-1 (Neural Network)</span>
+        </div>
+        <p class="algo-rec-body">
+          Based on multi-objective quantitative evaluation across real NASA cycling tests under practical sensor conditions (+30 mA DC offset and 5 mV ADC noise), <strong>MLP 3-16-1 is conclusively recommended as the best algorithm for embedded microcontroller (ESP32) deployment</strong>. It achieves the lowest Mean Absolute Error (1.25% vs SPKF 6.02% under 30 mA sensor bias), executes in 6.03 &mu;s with zero matrix multiplications or inversions, consumes only 348 bytes of memory, and requires no offline equivalent circuit model parameter calibration.
+        </p>
+        <div class="algo-rec-bullets">
+          <div class="algo-bullet-item">
+            <span class="algo-bullet-icon">⚡</span>
+            <div>
+              <strong>Ultra-Fast Embedded Latency (6.03 &mu;s):</strong>
+              Pure scalar forward pass with only 64 MACs. Over 19x faster than SPKF (118.5 &mu;s) and 7x faster than EKF (42.1 &mu;s).
+            </div>
+          </div>
+          <div class="algo-bullet-item">
+            <span class="algo-bullet-icon">🛡️</span>
+            <div>
+              <strong>Immunity to Current Sensor Drift:</strong>
+              Coulomb Counting and standard Kalman filters steadily accumulate drift under DC offset (+30 mA produces &gt;13% error over 6h). MLP error remains strictly bounded under 1.5%.
+            </div>
+          </div>
+          <div class="algo-bullet-item">
+            <span class="algo-bullet-icon">💾</span>
+            <div>
+              <strong>Minimal Footprint (348 bytes):</strong>
+              Weights and scaler constants fit into under 0.4 KB of Flash/RAM, compared to 3.4 KB required for SPKF Cholesky covariance matrices.
+            </div>
+          </div>
+          <div class="algo-bullet-item">
+            <span class="algo-bullet-icon">🔬</span>
+            <div>
+              <strong>When SPKF is Best:</strong>
+              SPKF (Sigma-Point Kalman) is the recommended choice for high-compute offline physics simulation when high-order ECM parameters (R0, R1, C1) are pre-calibrated in thermal chambers.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section B: Multi-Algorithm Benchmark Comparison Table -->
+      <section class="card" style="margin-bottom:16px;">
+        <h2>Multi-Algorithm Benchmark &amp; Scorecard Matrix (Held-out Test Replay)</h2>
+        <div class="table-container">
+          <table class="data-table" id="table-algo-scorecard">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Algorithm Name</th>
+                <th>Category</th>
+                <th>Avg MAE (%)</th>
+                <th>Avg RMSE (%)</th>
+                <th>MCU Latency (&mu;s)</th>
+                <th>Flash/RAM (Bytes)</th>
+                <th>Sensor Bias Resilience</th>
+                <th>ECM Calibration</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="algo-row-recommended">
+                <td><span class="algo-rank-badge algo-rank-1">1</span></td>
+                <td><strong>MLP 3-16-1 (Proposed)</strong></td>
+                <td>Neural Network</td>
+                <td><b style="color:var(--ok);">1.25 %</b></td>
+                <td>1.72 %</td>
+                <td><b style="color:var(--ok);">6.03 &mu;s</b></td>
+                <td><b style="color:var(--ok);">348 B</b></td>
+                <td><span class="pill" style="padding:2px 8px;font-size:10px;">EXCELLENT (Bounded)</span></td>
+                <td>None (Data-Driven)</td>
+                <td><span class="pill" style="background:var(--ok);color:#fff;border-color:var(--ok);">RECOMMENDED</span></td>
+              </tr>
+              <tr>
+                <td><span class="algo-rank-badge algo-rank-2">2</span></td>
+                <td><strong>SPKF (Sigma-Point Kalman)</strong></td>
+                <td>Nonlinear Physics Filter</td>
+                <td>6.02 %</td>
+                <td>7.22 %</td>
+                <td>118.5 &mu;s</td>
+                <td>3,400 B</td>
+                <td>Moderate (Drifts w/ Bias)</td>
+                <td>R0, R1, C1, OCV</td>
+                <td><span class="pill" style="background:var(--bl);color:#fff;border-color:var(--bl);">BEST PHYSICS</span></td>
+              </tr>
+              <tr>
+                <td><span class="algo-rank-badge algo-rank-3">3</span></td>
+                <td><strong>EKF (Extended Kalman)</strong></td>
+                <td>Linearized Physics Filter</td>
+                <td>6.02 %</td>
+                <td>7.22 %</td>
+                <td>42.1 &mu;s</td>
+                <td>1,850 B</td>
+                <td>Moderate (Drifts w/ Bias)</td>
+                <td>R0, R1, C1, dOCV</td>
+                <td>Classical Baseline</td>
+              </tr>
+              <tr>
+                <td><span class="algo-rank-badge">4</span></td>
+                <td><strong>Coulomb Counting (Biased Sensor)</strong></td>
+                <td>Current Integration</td>
+                <td>2.24 %*</td>
+                <td>2.53 %</td>
+                <td>1.10 &mu;s</td>
+                <td>16 B</td>
+                <td>POOR (&gt;13% on long runs)</td>
+                <td>None</td>
+                <td>Unreliable in Field</td>
+              </tr>
+              <tr>
+                <td><span class="algo-rank-badge">5</span></td>
+                <td><strong>Linear Regression</strong></td>
+                <td>Linear Statistical</td>
+                <td>3.02 %</td>
+                <td>3.76 %</td>
+                <td>2.40 &mu;s</td>
+                <td>32 B</td>
+                <td>Low (Linear limitation)</td>
+                <td>None</td>
+                <td>Insufficient Accuracy</td>
+              </tr>
+              <tr>
+                <td><span class="algo-rank-badge">6</span></td>
+                <td><strong>OCV Table Lookup (V-only)</strong></td>
+                <td>Static Lookup</td>
+                <td>9.75 %</td>
+                <td>12.17 %</td>
+                <td>4.50 &mu;s</td>
+                <td>120 B</td>
+                <td>FAILS UNDER LOAD (IR-drop)</td>
+                <td>None</td>
+                <td>Rest Only</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:11px;color:var(--mut);margin-top:8px;">
+          * Note: Coulomb counting accuracy degrades proportionally with run duration. On long runs (Discharge 02, 6 hours), Coulomb counting accumulates &gt;3.32% MAE (and &gt;13.3% with initial SOC offset), whereas MLP 3-16-1 maintains strictly bounded error (&le; 1.28% MAE).
+        </p>
+      </section>
+
+      <!-- Section C: State of Health (SOH) Degradation Analysis -->
+      <section class="card" style="margin-bottom:16px;">
+        <h2>State of Health (SOH) Estimation: Capacity Fade &amp; Resistance Growth</h2>
+        <p style="font-size:13px;color:var(--mut);margin-bottom:12px;line-height:1.6;">
+          Battery aging degradation manifests primarily through two concurrent physical mechanisms: <strong>Capacity Fade (loss of active lithium ions)</strong> and <strong>Resistance Fade (thickening of the Solid Electrolyte Interphase layer)</strong>. The Digital Twin implements dual real-time tracking for both phenomena.
+        </p>
+
+        <div class="grid-2">
+          <div style="background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px;">
+            <h3 style="font-size:13px;color:var(--ac);margin-bottom:6px;">1. Capacity Fade Algorithm (SOH<sub>C</sub>)</h3>
+            <p style="font-size:12px;color:var(--fg);margin-bottom:6px;">
+              <code>SOH<sub>C</sub> = (C<sub>actual</sub> / C<sub>nominal</sub>) &times; 100%</code>
+            </p>
+            <p style="font-size:11px;color:var(--mut);line-height:1.5;">
+              Nominal fresh capacity = 2.65 Ah. During cycling, Ah-throughput accumulation &Delta;C = &alpha; &middot; &radic;(Ah<sub>throughput</sub>) tracks active lithium inventory loss. At full cycle completions, trapezoidal integration updates C<sub>actual</sub>.
+            </p>
+          </div>
+
+          <div style="background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px;">
+            <h3 style="font-size:13px;color:var(--bl);margin-bottom:6px;">2. Resistance Fade Algorithm (SOH<sub>R</sub>)</h3>
+            <p style="font-size:12px;color:var(--fg);margin-bottom:6px;">
+              <code>SOH<sub>R</sub> = [(R<sub>eol</sub> - R<sub>0</sub>) / (R<sub>eol</sub> - R<sub>fresh</sub>)] &times; 100%</code>
+            </p>
+            <p style="font-size:11px;color:var(--mut);line-height:1.5;">
+              Fresh ohmic resistance R<sub>fresh</sub> = 55 m&Omega;; End-of-Life R<sub>eol</sub> = 110 m&Omega; (100% resistance growth). Dynamically extracts &Delta;V / &Delta;I during current steps and applies exponential recursive filtering.
+            </p>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:12px;">
+          <h3 style="font-size:13px;font-weight:700;margin-bottom:4px;">Dual Metric Fusion &amp; Remaining Useful Life (RUL)</h3>
+          <p style="font-size:12px;color:var(--fg);line-height:1.5;">
+            <code>SOH<sub>overall</sub> = 0.60 &middot; SOH<sub>C</sub> + 0.40 &middot; SOH<sub>R</sub></code> &middot; <strong>RUL:</strong> Cycles remaining until reaching the standard 80.0% End-of-Life (EOL) retirement threshold.
+          </p>
+        </div>
+
+        <h3 style="font-size:13px;font-weight:700;margin-top:16px;margin-bottom:6px;">NASA 30-Cycle Degradation History</h3>
+        <div class="table-container" style="max-height:220px;overflow-y:auto;">
+          <table class="data-table" id="table-soh-history">
+            <thead>
+              <tr>
+                <th>Cycle #</th>
+                <th>Measured Capacity (Ah)</th>
+                <th>Capacity SOH (%)</th>
+                <th>Ohmic R0 (m&Omega;)</th>
+                <th>Resistance SOH (%)</th>
+                <th>Combined SOH (%)</th>
+                <th>Projected RUL (Cycles)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Populated via API /api/soh -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Section D: Held-out Cycles Evaluation Table -->
+      <section class="card" style="margin-bottom:16px;">
+        <h2>Held-out Cycles Evaluation (5 mV Noise + 30 mA Current Offset)</h2>
+        <div class="table-container">
+          <table class="data-table" id="table-heldout">
+            <thead>
+              <tr>
+                <th>Cycle Name</th>
+                <th>Rate (A)</th>
+                <th>ML MAE (%)</th>
+                <th>ML RMSE (%)</th>
+                <th>ML Max (%)</th>
+                <th>CC MAE (%)</th>
+                <th>CC RMSE (%)</th>
+                <th>CC Max (%)</th>
+                <th>Target (&lt; 2-3%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Populated via API -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" style="margin-bottom:16px;">
+        <h2>Held-Out Verification Figure (Generated at 300 DPI)</h2>
+        <div style="text-align:center;padding:12px;">
+          <img src="/report/figures/held_out_tracking.png" alt="Held-out tracking" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+        </div>
+      </section>
+
+      <div class="grid-2" style="margin-top:16px;">
+        <section class="card">
+          <h2>Baselines Comparison (MLP vs Linear vs Random Forest vs CC)</h2>
+          <img src="/report/figures/baselines_comparison.png" alt="Baselines comparison" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+          <p style="font-size:12px;color:var(--mut);margin-top:8px;">
+            Benchmarked across all held-out test cycles. MLP 3-16-1 delivers superior accuracy and stability under noisy sensor conditions.
+          </p>
+        </section>
+
+        <section class="card">
+          <h2>Long-Horizon Sensor Drift Analysis (6-Hour Discharge)</h2>
+          <img src="/report/figures/long_horizon_drift.png" alt="Long-horizon drift" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+          <p style="font-size:12px;color:var(--mut);margin-top:8px;">
+            Demonstrates Coulomb Counting divergence due to cumulative DC bias offset, while the ML model error remains strictly bounded under 2%.
+          </p>
+        </section>
+      </div>
+
+      <section class="card" style="margin-top:16px;">
+        <h2>Hardware Robustness Sweeps (Noise, DC Offset, ADC Resolution)</h2>
+        <div style="text-align:center;padding:12px;">
+          <img src="/report/figures/robustness_sweeps.png" alt="Robustness sweeps" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+        </div>
+      </section>
+    </div>
+
+    <!-- =====================================================================
+         TAB 3: MODEL EXPLORER
+         ===================================================================== -->
+    <div class="tab-pane" id="tab-model">
+      <div class="grid-2">
+        <!-- Network Architecture -->
+        <section class="card">
+          <h2>MLP 3-16-1 Architecture</h2>
+          <div class="network-diagram">
+            <div class="layer">
+              <div class="layer-title">Inputs (3)</div>
+              <div class="neuron" title="V (Terminal Voltage)">V</div>
+              <div class="neuron" title="I (Current)">I</div>
+              <div class="neuron" title="V_smooth (60s Causal MA)">V<sub>s</sub></div>
+            </div>
+            <div style="font-size:20px;color:var(--mut);">&rarr;</div>
+            <div class="layer">
+              <div class="layer-title">Hidden (16 Tanh)</div>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;" id="hidden-neurons-grid">
+                <!-- 16 neurons -->
+              </div>
+            </div>
+            <div style="font-size:20px;color:var(--mut);">&rarr;</div>
+            <div class="layer">
+              <div class="layer-title">Output (1)</div>
+              <div class="neuron" style="border-color:var(--ok);color:var(--ok);" title="SOC %">SOC</div>
+            </div>
+          </div>
+
+          <h2>Embedded Hardware Footprint</h2>
+          <div class="kv-table" id="footprint-kv">
+            <span>Trainable Parameters</span><b>81 (Float32)</b>
+            <span>RAM/Flash Memory</span><b id="fp-ram">348 bytes</b>
+            <span>Multiply-Accumulate (MAC)</span><b>64 MACs / sample</b>
+            <span>INT8 Quantization MAE Impact</span><b id="fp-quant">0.15 % points</b>
+          </div>
+        </section>
+
+        <!-- Feature Partial Dependence & IR Drop -->
+        <section class="card">
+          <h2>Physical Principle: IR-Drop Motivation</h2>
+          <img src="/report/figures/voltage_vs_soc_overlay.png" alt="Voltage vs SOC IR drop" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+          <p style="font-size:12px;color:var(--mut);margin-top:10px;">
+            The terminal voltage shifts vertically by &Delta;V = I &middot; R<sub>0</sub>, proving that static OCV lookup fails under load and demonstrating why current is an essential neural network input.
+          </p>
+        </section>
+      </div>
+
+      <div class="grid-2" style="margin-top:16px;">
+        <section class="card">
+          <h2>Training Convergence Curves</h2>
+          <img src="/report/figures/training_curves.png" alt="Training curves" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+        </section>
+
+        <section class="card">
+          <h2>Architecture Ablation Studies (Width &amp; Depth)</h2>
+          <img src="/report/figures/ablation_architecture.png" alt="Architecture ablation" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+          <p style="font-size:12px;color:var(--mut);margin-top:8px;">
+            Confirms that 16 hidden tanh units provide optimal Pareto efficiency between accuracy (1.28% MAE) and embedded memory (348 bytes).
+          </p>
+        </section>
+      </div>
+
+      <section class="card" style="margin-top:16px;">
+        <h2>Model Explainability &amp; Feature Sensitivity</h2>
+        <div style="text-align:center;padding:12px;">
+          <img src="/report/figures/explainability_analysis.png" alt="Explainability analysis" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+        </div>
+      </section>
+    </div>
+
+    <!-- =====================================================================
+         TAB 4: DATA EXPLORER
+         ===================================================================== -->
+    <div class="tab-pane" id="tab-data">
+      <section class="card" style="margin-bottom:16px;">
+        <h2>NASA Dataset Overview (60 Cycling Files)</h2>
+        <p style="margin-bottom:14px;color:var(--mut);">
+          Source: NASA Ames Prognostics Center of Excellence (PCoE) Li-ion Battery Aging Dataset (Dashlink 133).
+        </p>
+        <div class="grid-2">
+          <img src="/report/figures/voltage_vs_time.png" alt="Voltage profiles" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+          <img src="/report/figures/current_vs_time.png" alt="Current profiles" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+        </div>
+        <div class="grid-2" style="margin-top:16px;">
+          <img src="/report/figures/measured_capacity_per_file.png" alt="Capacity per file" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+          <img src="/report/figures/temperature_vs_time.png" alt="Temperature profiles" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+        </div>
+        <div class="grid-2" style="margin-top:16px;">
+          <section class="card" style="margin-bottom:0;">
+            <h3>Uniform 5.0 s Resampling &Delta;t Distribution</h3>
+            <img src="/report/figures/dt_histogram.png" alt="Sampling interval histogram" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+          </section>
+          <section class="card" style="margin-bottom:0;">
+            <h3>4-Wire Kelvin Probe Contact Spread (Vbat1 - Vbat4)</h3>
+            <img src="/report/figures/vbat_spread_analysis.png" alt="Kelvin probe spread" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <!-- =====================================================================
+         TAB 5: CUSTOM IMPORT & PREDICT
+         ===================================================================== -->
+    <div class="tab-pane" id="tab-custom">
+      <!-- Section 1: Predefined Columns Specification -->
+      <section class="card" style="margin-bottom:16px;">
+        <h2>Custom Data Import &amp; ML SOC Prediction</h2>
+        <p style="color:var(--mut);margin-bottom:14px;line-height:1.6;">
+          Import battery test data with the <strong>predefined default columns</strong> below. Values inside the columns can be <strong>arbitrary</strong>: any voltage levels, load current profiles (discharge, charge, or resting), test durations, and sampling intervals. The trained MLP 3-16-1 neural network computes strictly causal <code>V_smooth</code> and predicts State of Charge (SOC %) for each sample.
+        </p>
+
+        <div class="columns-spec-grid">
+          <div class="col-spec-badge required">
+            <span class="badge-tag">DEFAULT / REQUIRED</span>
+            <div class="col-name">Time</div>
+            <div class="col-desc">Seconds or timestamps (e.g. <code>0, 5, 10, ...</code>). Auto-generated if omitted.</div>
+          </div>
+          <div class="col-spec-badge required">
+            <span class="badge-tag">DEFAULT / REQUIRED</span>
+            <div class="col-name">Voltage</div>
+            <div class="col-desc">Terminal cell voltage in Volts (e.g. <code>4.18, 3.85, 3.25</code>). Also accepts <code>V</code>, <code>Vbat</code>, or NASA <code>Vbat1..4</code>.</div>
+          </div>
+          <div class="col-spec-badge required">
+            <span class="badge-tag">DEFAULT / REQUIRED</span>
+            <div class="col-name">Current</div>
+            <div class="col-desc">Cell current in Amperes (e.g. <code>1.5, 2.0, 0.0</code>). Discharge positive (+), charge negative (-).</div>
+          </div>
+          <div class="col-spec-badge optional">
+            <span class="badge-tag">OPTIONAL</span>
+            <div class="col-name">Temperature</div>
+            <div class="col-desc">Cell temperature in &deg;C (defaults to 25.0 &deg;C if omitted).</div>
+          </div>
+          <div class="col-spec-badge optional">
+            <span class="badge-tag">OPTIONAL</span>
+            <div class="col-name">SOC_True</div>
+            <div class="col-desc">Reference ground truth SOC % (if provided, computes validation MAE &amp; RMSE).</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;font-size:12px;color:var(--mut);line-height:1.6;">
+          &bull; <strong>Auto Delimiter:</strong> Comma (<code>,</code>), Semicolon (<code>;</code>), and Tab (<code>\t</code>) are auto-detected.<br>
+          &bull; <strong>Arbitrary Profile:</strong> Accepts arbitrary row counts (from 10 up to 100,000+ samples) and arbitrary sampling rates (&Delta;t).
+        </div>
+      </section>
+
+      <!-- Section 2: Upload Zone & Actions -->
+      <section class="card" style="margin-bottom:16px;">
+        <h2>Import Battery Data File</h2>
+        <div class="upload-dropzone" id="custom-dropzone">
+          <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:8px;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px;">Drag &amp; drop your CSV / TSV file here, or click to browse</div>
+          <div style="font-size:12px;color:var(--mut);" id="dropzone-file-name">Supports .csv, .txt, .tsv files with predefined columns (Time, Voltage, Current)</div>
+          <input type="file" id="file-custom-input" accept=".csv,.txt,.tsv" style="display:none;">
+        </div>
+
+        <div class="custom-btn-toolbar" style="margin-top:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+          <button id="btn-sample-csv" style="background:var(--card);color:var(--fg);border:1px solid var(--bd);">📥 Download Sample CSV Template</button>
+          <button id="btn-load-sample-profile" style="background:var(--card);color:var(--fg);border:1px solid var(--bd);">⚡ Load Sample Test Profile</button>
+          <button id="btn-toggle-editor" style="background:var(--card);color:var(--fg);border:1px solid var(--bd);">✏️ Toggle Raw CSV Editor</button>
+          
+          <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+            <label style="font-size:12px;color:var(--fg);display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="chk-auto-load-twin" checked>
+              Load into Live Digital Twin replay
+            </label>
+            <button id="btn-run-prediction" style="background:var(--ac);color:#fff;font-weight:700;padding:8px 18px;">🚀 Predict SOC</button>
+          </div>
+        </div>
+
+        <!-- Raw Text Editor (Collapsible) -->
+        <div id="raw-editor-container" style="display:none;margin-top:14px;">
+          <label style="font-size:12px;color:var(--mut);display:block;margin-bottom:4px;">Raw CSV Content (Editable):</label>
+          <textarea id="txt-custom-raw" rows="7" style="width:100%;font-family:monospace;font-size:12px;padding:8px;border-radius:6px;border:1px solid var(--bd);background:var(--bg);color:var(--fg);resize:vertical;" placeholder="Time,Voltage,Current&#10;0,4.18,1.5&#10;5,4.15,1.5..."></textarea>
+        </div>
+
+        <div id="custom-alert-msg" style="display:none;margin-top:12px;padding:10px 14px;border-radius:6px;font-size:13px;"></div>
+      </section>
+
+      <!-- Section 3: Prediction Results Summary (KPIs) -->
+      <div id="custom-results-section" style="display:none;">
+        <section class="card" style="margin-bottom:16px;">
+          <h2>Prediction Overview &amp; Dataset Statistics</h2>
+          <div class="custom-kpi-grid">
+            <div class="kpi-card">
+              <span class="label">Total Samples</span>
+              <b class="val" id="kpi-sample-count">--</b>
+            </div>
+            <div class="kpi-card">
+              <span class="label">Test Duration</span>
+              <b class="val" id="kpi-duration">--</b>
+            </div>
+            <div class="kpi-card">
+              <span class="label">Sampling Rate (&Delta;t)</span>
+              <b class="val" id="kpi-dt">--</b>
+            </div>
+            <div class="kpi-card">
+              <span class="label">Voltage Range</span>
+              <b class="val" id="kpi-v-range">--</b>
+            </div>
+            <div class="kpi-card">
+              <span class="label">Current Range</span>
+              <b class="val" id="kpi-i-range">--</b>
+            </div>
+            <div class="kpi-card">
+              <span class="label">Initial Predicted SOC</span>
+              <b class="val" id="kpi-soc-start" style="color:var(--ok);">--</b>
+            </div>
+            <div class="kpi-card">
+              <span class="label">Final Predicted SOC</span>
+              <b class="val" id="kpi-soc-end" style="color:var(--wn);">--</b>
+            </div>
+            <div class="kpi-card">
+              <span class="label">Net SOC Delta</span>
+              <b class="val" id="kpi-soc-delta">--</b>
+            </div>
+          </div>
+
+          <!-- Ground Truth Validation Banner (Shown if SOC_True exists) -->
+          <div id="gt-accuracy-box" style="display:none;margin-top:14px;padding:12px;background:var(--ac-light);border:1px solid var(--ac);border-radius:8px;">
+            <div style="font-weight:700;color:var(--ac);margin-bottom:6px;">Ground Truth Verification (Reference SOC Present)</div>
+            <div style="display:flex;gap:20px;font-size:13px;flex-wrap:wrap;">
+              <span>ML MAE: <strong id="kpi-ml-mae" style="color:var(--ok);">--</strong></span>
+              <span>ML RMSE: <strong id="kpi-ml-rmse">--</strong></span>
+              <span>Max Error: <strong id="kpi-ml-max">--</strong></span>
+              <span>Target Met: <strong style="color:var(--ok);">&lt; 2-3%</strong></span>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;display:flex;gap:12px;flex-wrap:wrap;">
+            <button id="btn-export-custom-csv" style="background:var(--ac);color:#fff;font-weight:600;padding:8px 14px;">📥 Export Predictions to CSV</button>
+            <button id="btn-replay-in-twin" style="background:var(--ok);color:#fff;font-weight:600;padding:8px 14px;">🔄 Replay in Live Digital Twin</button>
+          </div>
+        </section>
+
+        <!-- Section 4: Interactive Charts -->
+        <section class="card chart-card">
+          <h2>Predicted State of Charge (SOC %) Tracking</h2>
+          <div class="chart-legend">
+            <span><i class="legend-line" style="background:#16a34a;"></i>ML Predicted SOC</span>
+            <span><i class="legend-line" style="background:#dc2626;border-style:dashed;"></i>Coulomb Counting Baseline</span>
+            <span id="legend-item-true-soc" style="display:none;"><i class="legend-line" style="background:#1f2937;"></i>True Reference SOC</span>
+          </div>
+          <div class="chart-wrapper" style="height:260px;">
+            <canvas id="chart-custom-soc"></canvas>
+          </div>
+        </section>
+
+        <div class="grid-2">
+          <section class="card chart-card">
+            <h2>Terminal Voltage &amp; Causal Filtered Voltage (V)</h2>
+            <div class="chart-legend">
+              <span><i class="legend-line" style="background:#2563eb;"></i>Terminal Voltage (V)</span>
+              <span><i class="legend-line" style="background:#9333ea;"></i>V_smooth (60s Causal MA)</span>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="chart-custom-vi"></canvas>
+            </div>
+          </section>
+
+          <section class="card chart-card">
+            <h2>Cell Load Current (A)</h2>
+            <div class="chart-legend">
+              <span><i class="legend-line" style="background:#d97706;"></i>Current (A) [Discharge +, Charge -]</span>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="chart-custom-curr"></canvas>
+            </div>
+          </section>
+        </div>
+
+        <!-- Section 5: Data & Predictions Preview Table -->
+        <section class="card">
+          <h2>Predictions Table Preview (First 5 &amp; Last 5 Samples)</h2>
+          <table class="data-table" id="table-custom-preview">
+            <thead>
+              <tr>
+                <th>Sample #</th>
+                <th>Time (s)</th>
+                <th>Voltage (V)</th>
+                <th>Current (A)</th>
+                <th>V_smooth (V)</th>
+                <th>Predicted SOC (%)</th>
+                <th>True SOC (%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Populated via API -->
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         TAB 6: ABOUT
+         ===================================================================== -->
+    <div class="tab-pane" id="tab-about">
+      <section class="card" style="margin-bottom:16px;">
+        <h2>Project Title & Academic Deliverable</h2>
+        <h3 style="color:var(--ac);margin-bottom:8px;">Estimation of State of Charge (SOC) of a Battery using Machine Learning, a Digital Twin Implementation</h3>
+        <p style="color:var(--mut);margin-bottom:12px;">
+          B.Tech in Electrical & Electronics Engineering (EEE), Amrita School of Engineering, Amrita Vishwa Vidyapeetham.
+        </p>
+
+        <h3 style="margin-top:16px;font-size:14px;">Project Team</h3>
+        <ul style="margin-left:20px;margin-top:8px;line-height:1.8;">
+          <li><strong>Maanas S</strong> (CB.EN.U4ELC24052)</li>
+          <li><strong>Abrar M</strong> (CB.EN.U4ELC24005)</li>
+          <li><strong>Abhinav Pradeep</strong> (CB.EN.U4ELC24004)</li>
+          <li><strong>Varun Ladda</strong> (CB.EN.U4ELC24062)</li>
+        </ul>
+      </section>
+
+      <section class="card" style="margin-bottom:16px;">
+        <h2>Physical Principles & SOC Definition</h2>
+        <p style="margin-bottom:8px;">State of Charge is defined via Coulomb Counting integration:</p>
+        <pre style="background:var(--bg);padding:10px;border-radius:6px;margin-bottom:12px;font-family:monospace;">
+SOC(t) = SOC(0) - (1 / C_nominal) * &int; i(t) dt
+        </pre>
+        <p><strong>Why ML?</strong> Coulomb counting accumulates DC sensor offset (&plusmn;30 mA) over time, and OCV lookup requires long relaxation rests. An MLP learns the non-linear terminal voltage-to-SOC mapping directly without requiring equivalent circuit modeling.</p>
+      </section>
+
+      <section class="card">
+        <h2>Known Limitations & Future Scope</h2>
+        <ul style="margin-left:20px;line-height:1.8;color:var(--fg);">
+          <li><strong>Cycle vs Cell Generalisation:</strong> Held-out test files originate from the same physical cells under different cycling currents.</li>
+          <li><strong>Label Derivation:</strong> SOC labels are normalized from measured Coulomb counting capacity, inheriting its fundamental bounds.</li>
+          <li><strong>Future Scope:</strong> Adding cell temperature as a 4th input, cross-cell transfer learning, SOH aging degradation estimation, and physical ESP32 HIL deployment.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    &copy; 2026 Amrita School of Engineering, EEE &middot; Battery Management Systems &middot; Digital Twin Implementation
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

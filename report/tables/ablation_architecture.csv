@@ -1,0 +1,9 @@
+Architecture,Parameters,Pair 10 MAE (%),Pair 10 RMSE (%),Latency (µs)
+4 units (tanh),21,25.54,34.85,16120.15
+8 units (tanh),41,13.36,20.56,15158.89
+"16 units (tanh, Proposed)",81,5.11,7.49,22245.66
+32 units (tanh),161,2.41,2.99,11028.9
+64 units (tanh),321,1.66,2.13,13246.03
+"Two Layers (16-16, tanh)",353,4.14,7.69,12508.53
+16 units (ReLU),81,1.32,1.72,12441.45
+16 units (Sigmoid),81,7.18,9.69,12326.98

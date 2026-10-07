@@ -1,0 +1,3 @@
+Condition,Pair 10 MAE (%)
+With Hardware Noise Augmentation (Proposed),5.11
+Without Noise Augmentation (Clean Train Only),21.09
