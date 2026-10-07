@@ -242,16 +242,16 @@ var cap_loss=0.0035*Math.sqrt(sim.ah_tp),cur_cyc=Math.max(1,Math.round(sim.ah_tp
 var rul_cyc=Math.max(0,Math.round(cur_cyc*(2.65*0.20-cap_loss)/Math.max(0.001,cap_loss)));
 if($('soh-rul'))$('soh-rul').textContent=(sim.r0_est*1000).toFixed(1)+' m\u03a9 \u00b7 '+(rul_cyc>0?rul_cyc+' cyc':'>30 cyc');
 $('mi').textContent=rep?'MLP 3-'+netN.h+'-1 (V, I, smoothed V) trained offline on '+NI.n+' samples from real NASA cycles (53 of 60 files); the cycles shown were held out. Train RMSE '+NI.tr+' %':'MLP 3-10-1 (V, I, smoothed V) trained in-page on '+nTrain+' simulated samples, train RMSE '+trRmse.toFixed(2)+' %'}
-function plot(cv,sr,y0,y1,zero){var d=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;cv.width=w*d;cv.height=h*d;var g=cv.getContext('2d');g.scale(d,d);var fg=getComputedStyle(document.body).color,H=sim.H,n=H.t.length,xm=Math.max(10,n?H.t[n-1]:10),pl=36,pb=18;
-g.font='11px system-ui';g.fillStyle=fg;g.strokeStyle='rgba(128,128,128,.3)';g.lineWidth=1;
-for(var k=0;k<=4;k++){var y=h-pb-(h-pb-6)*k/4;g.beginPath();g.moveTo(pl,y);g.lineTo(w-6,y);g.stroke();g.fillText((y0+(y1-y0)*k/4).toFixed(0),2,y+4)}
-g.fillText('min',w-26,h-3);g.fillText(xm.toFixed(0),w/2,h-3);
-if(zero)for(var k=0;k<n-1;k++){var ph=H.ph[k];if(!ph)continue;var x0=pl+(w-pl-6)*H.t[k]/xm,x1=pl+(w-pl-6)*H.t[k+1]/xm;g.fillStyle=ph>0?'rgba(37,99,235,.10)':'rgba(217,119,6,.16)';g.fillRect(x0,6,x1-x0+.5,h-pb-6)}
-g.fillStyle=fg;
-sr.forEach(function(s){g.beginPath();g.strokeStyle=s[1]==='fg'?fg:s[1];g.lineWidth=1.6;for(var k=0;k<n;k++){var v=s[0](k),x=pl+(w-pl-6)*H.t[k]/xm,y=h-pb-(h-pb-6)*(cl(v,y0,y1)-y0)/(y1-y0);k?g.lineTo(x,y):g.moveTo(x,y)}g.stroke()})}
-function draw(){var H=sim.H;
-plot($('c1'),[[function(k){return H.tr[k]},'fg'],[function(k){return H.cc[k]},'#dc2626'],[function(k){return H.sp[k]},'#8b5cf6'],[function(k){return H.ek[k]},'#06b6d4'],[function(k){return H.ml[k]},'#16a34a']],0,100,true);
-plot($('c2'),[[function(k){return H.cc[k]-H.tr[k]},'#dc2626'],[function(k){return H.sp[k]-H.tr[k]},'#8b5cf6'],[function(k){return H.ek[k]-H.tr[k]},'#06b6d4'],[function(k){return H.ml[k]-H.tr[k]},'#16a34a']],-10,10,true)}
+function plot(cv,sr,y0,y1,isSocChart){var d=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;cv.width=w*d;cv.height=h*d;var g=cv.getContext('2d');g.scale(d,d);var fg=getComputedStyle(document.body).color,H=sim.H,n=H.t.length,xm=Math.max(10,n?H.t[n-1]:10),pl=42,pb=20;
+g.font='10px system-ui,-apple-system,sans-serif';g.fillStyle='rgba(100,116,139,.85)';g.lineWidth=1;
+if(isSocChart){for(var k=0;k<n-1;k++){var ph=H.ph[k];if(!ph)continue;var x0=pl+(w-pl-8)*H.t[k]/xm,x1=pl+(w-pl-8)*H.t[k+1]/xm;g.fillStyle=ph>0?'rgba(37,99,235,.08)':'rgba(217,119,6,.12)';g.fillRect(x0,6,x1-x0+.5,h-pb-6)}}
+for(var k=0;k<=4;k++){var yVal=y0+(y1-y0)*k/4,y=h-pb-(h-pb-6)*k/4;g.beginPath();if(Math.abs(yVal)<0.001){g.strokeStyle='rgba(100,116,139,.55)';g.lineWidth=1.4}else{g.strokeStyle='rgba(128,128,128,.18)';g.lineWidth=1}g.moveTo(pl,y);g.lineTo(w-6,y);g.stroke();var txt=(yVal>0&&!isSocChart?'+':'')+yVal.toFixed(0)+'%';g.fillStyle='rgba(100,116,139,.85)';g.fillText(txt,4,y+3.5)}
+if(!isSocChart&&y0<0&&y1>0){[2,-2,3,-3].forEach(function(tgt){if(tgt>=y0&&tgt<=y1){var yt=h-pb-(h-pb-6)*(tgt-y0)/(y1-y0);g.beginPath();g.setLineDash([3,3]);g.strokeStyle=Math.abs(tgt)===2?'rgba(22,163,74,.45)':'rgba(217,119,6,.35)';g.moveTo(pl,yt);g.lineTo(w-6,yt);g.stroke();g.setLineDash([])}})}
+g.fillStyle='rgba(100,116,139,.85)';g.fillText('0 min',pl,h-4);g.fillText((xm/2).toFixed(0)+' min',pl+(w-pl-8)/2-14,h-4);g.fillText(xm.toFixed(0)+' min',w-48,h-4);
+sr.forEach(function(s){g.beginPath();g.strokeStyle=s[1]==='fg'?fg:s[1];g.lineWidth=s[1]==='fg'?2:1.7;for(var k=0;k<n;k++){var v=s[0](k),x=pl+(w-pl-8)*H.t[k]/xm,y=h-pb-(h-pb-6)*(cl(v,y0,y1)-y0)/(y1-y0);k?g.lineTo(x,y):g.moveTo(x,y)}g.stroke()})}
+function draw(){var H=sim.H;plot($('c1'),[[function(k){return H.tr[k]},'fg'],[function(k){return H.cc[k]},'#dc2626'],[function(k){return H.sp[k]},'#8b5cf6'],[function(k){return H.ek[k]},'#06b6d4'],[function(k){return H.ml[k]},'#16a34a']],0,100,true);
+var maxErr=10,n=H.t.length;for(var k=Math.max(0,n-200);k<n;k++){var ecc=Math.abs(H.cc[k]-H.tr[k]);if(ecc>maxErr)maxErr=Math.min(30,Math.ceil(ecc/5)*5)}
+plot($('c2'),[[function(k){return H.cc[k]-H.tr[k]},'#dc2626'],[function(k){return H.sp[k]-H.tr[k]},'#8b5cf6'],[function(k){return H.ek[k]-H.tr[k]},'#06b6d4'],[function(k){return H.ml[k]-H.tr[k]},'#16a34a']],-maxErr,maxErr,false)}
 var acc=0,lt=0,uc=0;
 function loop(ts){var dt=Math.min(.1,(ts-lt)/1000||0);lt=ts;if(run){acc+=dt*(+$('sp').value);var n=Math.min(Math.floor(acc),4000);acc-=n;if(n>0)advance(n)}
 if(++uc%4===0||!run){ui();draw()}requestAnimationFrame(loop)}

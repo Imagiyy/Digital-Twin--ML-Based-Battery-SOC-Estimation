@@ -213,7 +213,7 @@
           <span><i class="legend-line" style="background:#06b6d4;"></i>EKF Estimate</span>
           <span><i class="legend-line" style="background:#dc2626;"></i>Coulomb Counting (Biased Sensor)</span>
         </div>
-        <div class="chart-wrapper">
+        <div class="chart-wrapper main-chart">
           <canvas id="chart-soc"></canvas>
         </div>
       </section>
@@ -551,72 +551,77 @@
         <!-- Feature Partial Dependence & IR Drop -->
         <section class="card">
           <h2>Physical Principle: IR-Drop Motivation</h2>
-          <img src="/report/figures/voltage_vs_soc_overlay.png" alt="Voltage vs SOC IR drop" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+          <img src="/report/figures/voltage_vs_soc_overlay.png" alt="Voltage vs SOC IR drop">
           <p style="font-size:12px;color:var(--mut);margin-top:10px;">
             The terminal voltage shifts vertically by &Delta;V = I &middot; R<sub>0</sub>, proving that static OCV lookup fails under load and demonstrating why current is an essential neural network input.
           </p>
         </section>
-      </div>
 
-      <div class="grid-2" style="margin-top:16px;">
+        <!-- Training Convergence Curves -->
         <section class="card">
           <h2>Training Convergence Curves</h2>
-          <img src="/report/figures/training_curves.png" alt="Training curves" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
-        </section>
-
-        <section class="card">
-          <h2>Architecture &amp; Activation Ablation Studies</h2>
-          <img src="/report/figures/ablation_architecture.png" alt="Architecture ablation" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
-          <div style="font-size:12px;color:var(--mut);margin-top:10px;line-height:1.5;">
-            <p style="margin:4px 0;"><strong>Panel (a) Model Capacity &amp; Pareto Elbow:</strong> Error drops precipitously from 4 units (5.92%) &rarr; 8 units (1.91%) &rarr; <strong>16 units Proposed (1.19% MAE)</strong>. Scaling further to 32 or 64 units yields marginal gains (&lt;0.08%) while quadrupling parameter counts.</p>
-            <p style="margin:4px 0;"><strong>Panel (b) Activation Function Selection:</strong> Tanh achieves 1.19% MAE (matching ReLU's 1.12%), while providing smooth <em>C<sup>&infin;</sup></em> Jacobian gradients required for Kalman filter linearization and bounded (&minus;1, 1) numerical stability on embedded microcontrollers.</p>
-          </div>
-          
-          <h3 style="font-size:13px;margin:14px 0 6px;color:var(--fg);">Empirical Architecture Benchmark</h3>
-          <div class="table-container" style="max-height:260px;overflow-y:auto;">
-            <table class="data-table" id="table-ablation-arch" style="font-size:11px;">
-              <thead>
-                <tr>
-                  <th>Architecture</th>
-                  <th>Parameters</th>
-                  <th>Pair 10 MAE (%)</th>
-                  <th>Pair 10 RMSE (%)</th>
-                  <th>Latency (&mu;s)</th>
-                  <th>Role</th>
-                </tr>
-              </thead>
-              <tbody>
-                <!-- Populated via API -->
-              </tbody>
-            </table>
-          </div>
-
-          <div class="grid-2" style="margin-top:12px;gap:10px;">
-            <div>
-              <h3 style="font-size:12px;margin:0 0 6px;color:var(--fg);">Feature Sweep Ablation</h3>
-              <div class="table-container">
-                <table class="data-table" id="table-ablation-feat" style="font-size:11px;">
-                  <thead>
-                    <tr><th>Feature Set</th><th>Dim</th><th>MAE (%)</th></tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-            <div>
-              <h3 style="font-size:12px;margin:0 0 6px;color:var(--fg);">Noise Augmentation Ablation</h3>
-              <div class="table-container">
-                <table class="data-table" id="table-ablation-noise" style="font-size:11px;">
-                  <thead>
-                    <tr><th>Condition</th><th>MAE (%)</th></tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <img src="/report/figures/training_curves.png" alt="Training curves">
+          <p style="font-size:12px;color:var(--mut);margin-top:10px;">
+            Demonstrates smooth loss minimization over 80 iterations under Huber loss, achieving stable convergence without gradient explosion or oscillatory instabilities.
+          </p>
         </section>
       </div>
+
+      <!-- Full-Width Architecture & Activation Ablation Studies -->
+      <section class="card" style="margin-top:16px;">
+        <h2>Architecture &amp; Activation Ablation Studies</h2>
+        <div style="text-align:center;padding:6px 0;">
+          <img src="/report/figures/ablation_architecture.png" alt="Architecture ablation" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">
+        </div>
+        <div style="font-size:12px;color:var(--mut);margin-top:10px;line-height:1.5;">
+          <p style="margin:4px 0;"><strong>Panel (a) Model Capacity &amp; Pareto Elbow:</strong> Error drops precipitously from 4 units (5.92%) &rarr; 8 units (1.91%) &rarr; <strong>16 units Proposed (1.19% MAE)</strong>. Scaling further to 32 or 64 units yields marginal gains (&lt;0.08%) while quadrupling parameter counts.</p>
+          <p style="margin:4px 0;"><strong>Panel (b) Activation Function Selection:</strong> Tanh achieves 1.19% MAE (matching ReLU's 1.12%), while providing smooth <em>C<sup>&infin;</sup></em> Jacobian gradients required for Kalman filter linearization and bounded (&minus;1, 1) numerical stability on embedded microcontrollers.</p>
+        </div>
+        
+        <h3 style="font-size:13px;margin:14px 0 6px;color:var(--fg);">Empirical Architecture Benchmark</h3>
+        <div class="table-container" style="max-height:260px;overflow-y:auto;">
+          <table class="data-table" id="table-ablation-arch" style="font-size:11px;">
+            <thead>
+              <tr>
+                <th>Architecture</th>
+                <th>Parameters</th>
+                <th>Pair 10 MAE (%)</th>
+                <th>Pair 10 RMSE (%)</th>
+                <th>Latency (&mu;s)</th>
+                <th>Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Populated via API -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid-2" style="margin-top:12px;gap:10px;">
+          <div>
+            <h3 style="font-size:12px;margin:0 0 6px;color:var(--fg);">Feature Sweep Ablation</h3>
+            <div class="table-container">
+              <table class="data-table" id="table-ablation-feat" style="font-size:11px;">
+                <thead>
+                  <tr><th>Feature Set</th><th>Dim</th><th>MAE (%)</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3 style="font-size:12px;margin:0 0 6px;color:var(--fg);">Noise Augmentation Ablation</h3>
+            <div class="table-container">
+              <table class="data-table" id="table-ablation-noise" style="font-size:11px;">
+                <thead>
+                  <tr><th>Condition</th><th>MAE (%)</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section class="card" style="margin-top:16px;">
         <h2>Model Explainability &amp; Feature Sensitivity</h2>

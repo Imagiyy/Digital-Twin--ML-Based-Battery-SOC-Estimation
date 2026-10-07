@@ -78,7 +78,7 @@ function setupCharts() {
     },
   };
 
-  // 1. SOC Tracking Chart
+  // 1. SOC Tracking Chart (0% to 100% physically bounded)
   const ctxSoc = $("chart-soc").getContext("2d");
   chartSoc = new Chart(ctxSoc, {
     type: "line",
@@ -95,13 +95,27 @@ function setupCharts() {
     options: {
       ...commonOptions,
       scales: {
-        ...commonOptions.scales,
-        y: { min: -5, max: 105, title: { display: true, text: "SOC (%)", font: { size: 11 } } },
+        x: {
+          ...commonOptions.scales.x,
+          title: { display: true, text: "Simulation Time (s)", font: { size: 11 } }
+        },
+        y: {
+          min: 0,
+          max: 100,
+          ticks: {
+            stepSize: 20,
+            font: { size: 10 },
+            color: "#64748b",
+            callback: (v) => v + "%"
+          },
+          grid: { color: "rgba(100, 116, 139, 0.15)" },
+          title: { display: true, text: "State of Charge (%)", font: { size: 11, weight: "bold" } },
+        },
       },
     },
   });
 
-  // 2. Estimation Error Chart
+  // 2. Estimation Error Chart (Symmetric zero-centered with target tolerance)
   const ctxErr = $("chart-error").getContext("2d");
   chartError = new Chart(ctxErr, {
     type: "line",
@@ -110,20 +124,37 @@ function setupCharts() {
       datasets: [
         { label: "ML Error", data: [], borderColor: "#16a34a", borderWidth: 1.8, pointRadius: 0 },
         { label: "CC Error", data: [], borderColor: "#dc2626", borderWidth: 1.2, borderDash: [2, 2], pointRadius: 0 },
-        { label: "+3% Target", data: [], borderColor: "rgba(22,163,74,0.4)", borderWidth: 1, borderDash: [3, 3], pointRadius: 0 },
-        { label: "-3% Target", data: [], borderColor: "rgba(22,163,74,0.4)", borderWidth: 1, borderDash: [3, 3], pointRadius: 0 },
+        { label: "+3% Target", data: [], borderColor: "rgba(22,163,74,0.45)", borderWidth: 1, borderDash: [3, 3], pointRadius: 0 },
+        { label: "-3% Target", data: [], borderColor: "rgba(22,163,74,0.45)", borderWidth: 1, borderDash: [3, 3], pointRadius: 0 },
       ],
     },
     options: {
       ...commonOptions,
       scales: {
-        ...commonOptions.scales,
-        y: { min: -8, max: 8, title: { display: true, text: "Error (pts)", font: { size: 11 } } },
+        x: {
+          ...commonOptions.scales.x,
+          title: { display: true, text: "Time (s)", font: { size: 11 } }
+        },
+        y: {
+          suggestedMin: -5,
+          suggestedMax: 5,
+          ticks: {
+            stepSize: 2.5,
+            font: { size: 10 },
+            color: "#64748b",
+            callback: (v) => (v > 0 ? "+" : "") + v + "%"
+          },
+          grid: {
+            color: (context) => (context.tick && context.tick.value === 0 ? "rgba(100, 116, 139, 0.6)" : "rgba(100, 116, 139, 0.12)"),
+            lineWidth: (context) => (context.tick && context.tick.value === 0 ? 1.5 : 1)
+          },
+          title: { display: true, text: "Estimation Error (% points)", font: { size: 11, weight: "bold" } },
+        },
       },
     },
   });
 
-  // 3. Voltage and Current Chart
+  // 3. Voltage and Current Chart (Physically aligned 18650 ranges)
   const ctxVi = $("chart-vi").getContext("2d");
   chartVi = new Chart(ctxVi, {
     type: "line",
@@ -137,9 +168,41 @@ function setupCharts() {
     options: {
       ...commonOptions,
       scales: {
-        x: commonOptions.scales.x,
-        yV: { type: "linear", position: "left", min: 2.8, max: 4.3, title: { display: true, text: "Voltage (V)" } },
-        yI: { type: "linear", position: "right", min: -3.5, max: 3.5, title: { display: true, text: "Current (A)" } },
+        x: {
+          ...commonOptions.scales.x,
+          title: { display: true, text: "Time (s)", font: { size: 11 } }
+        },
+        yV: {
+          type: "linear",
+          position: "left",
+          min: 2.5,
+          max: 4.35,
+          ticks: {
+            stepSize: 0.5,
+            font: { size: 10 },
+            color: "#8c1236",
+            callback: (v) => v.toFixed(1) + " V"
+          },
+          grid: { color: "rgba(140, 18, 54, 0.08)" },
+          title: { display: true, text: "Cell Voltage (V)", color: "#8c1236", font: { size: 11, weight: "bold" } }
+        },
+        yI: {
+          type: "linear",
+          position: "right",
+          min: -3.5,
+          max: 3.5,
+          ticks: {
+            stepSize: 1.0,
+            font: { size: 10 },
+            color: "#2563eb",
+            callback: (v) => (v > 0 ? "+" : "") + v.toFixed(0) + " A"
+          },
+          grid: {
+            color: (context) => (context.tick && context.tick.value === 0 ? "rgba(37, 99, 235, 0.35)" : "transparent"),
+            lineWidth: (context) => (context.tick && context.tick.value === 0 ? 1.5 : 1)
+          },
+          title: { display: true, text: "Current (A, Disch > 0)", color: "#2563eb", font: { size: 11, weight: "bold" } }
+        },
       },
     },
   });
@@ -929,7 +992,6 @@ function renderCustomCharts(series, hasGroundTruth) {
     });
   }
 
-  if (chartCustomSoc) chartCustomSoc.destroy();
   chartCustomSoc = new Chart(ctxSoc, {
     type: "line",
     data: {
@@ -940,7 +1002,17 @@ function renderCustomCharts(series, hasGroundTruth) {
       ...commonOpts,
       scales: {
         ...commonOpts.scales,
-        y: { min: -2, max: 102, title: { display: true, text: "SOC (%)", font: { size: 11 } } },
+        y: {
+          min: 0,
+          max: 100,
+          ticks: {
+            stepSize: 20,
+            font: { size: 10 },
+            color: "#64748b",
+            callback: (v) => v + "%"
+          },
+          title: { display: true, text: "State of Charge (%)", font: { size: 11, weight: "bold" } }
+        },
       },
     },
   });
@@ -960,7 +1032,17 @@ function renderCustomCharts(series, hasGroundTruth) {
       ...commonOpts,
       scales: {
         ...commonOpts.scales,
-        y: { title: { display: true, text: "Voltage (V)", font: { size: 11 } } },
+        y: {
+          suggestedMin: 2.5,
+          suggestedMax: 4.35,
+          ticks: {
+            stepSize: 0.5,
+            font: { size: 10 },
+            color: "#64748b",
+            callback: (v) => v.toFixed(1) + " V"
+          },
+          title: { display: true, text: "Voltage (V)", font: { size: 11, weight: "bold" } }
+        },
       },
     },
   });
@@ -979,7 +1061,21 @@ function renderCustomCharts(series, hasGroundTruth) {
       ...commonOpts,
       scales: {
         ...commonOpts.scales,
-        y: { title: { display: true, text: "Current (A)", font: { size: 11 } } },
+        y: {
+          suggestedMin: -3.5,
+          suggestedMax: 3.5,
+          ticks: {
+            stepSize: 1.0,
+            font: { size: 10 },
+            color: "#64748b",
+            callback: (v) => (v > 0 ? "+" : "") + v.toFixed(0) + " A"
+          },
+          grid: {
+            color: (context) => (context.tick && context.tick.value === 0 ? "rgba(100, 116, 139, 0.45)" : "rgba(100, 116, 139, 0.12)"),
+            lineWidth: (context) => (context.tick && context.tick.value === 0 ? 1.5 : 1)
+          },
+          title: { display: true, text: "Current (A)", font: { size: 11, weight: "bold" } }
+        },
       },
     },
   });
