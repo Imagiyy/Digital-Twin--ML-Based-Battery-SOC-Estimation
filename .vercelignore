@@ -1,18 +1,15 @@
-# Prevent Vercel from bundling heavy Python scientific libraries (scipy, sklearn, matplotlib, pyarrow)
-# which exceed AWS Lambda's 500 MB serverless function limit.
-requirements.txt
-src/
-tests/
-data/
-models/
-notebooks/
-firmware/
-*.py
-*.parquet
-*.joblib
+# Ignore large non-runtime assets to keep Vercel bundle well under 500 MB
 *.pptx
 *.docx
-*.bat
-*.ps1
+*.zip
+*.mkv.torrent
+Discharge_folder/
+Load_folder/
+firmware/
+notebooks/
+tests/
+.pytest_cache/
+run_windows.bat
+run_windows.ps1
 Makefile
-config.yaml
+requirements-dev.txt
