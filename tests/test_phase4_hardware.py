@@ -79,6 +79,19 @@ def test_tp4056_state_machine_and_leds():
     assert tp.current_state == TP4056State.DISCHARGING
     assert tp._debounce_count == 0
 
+    # 6. SOC slope correlation: decreasing SOC -> DISCHARGING, increasing SOC -> CHARGING
+    tp.reset(initial_state=TP4056State.CHARGED_STANDBY, initial_soc=100.0)
+    # Decreasing SOC (100.0 -> 99.5) forces DISCHARGING
+    res_dec = tp.step(v_cell=4.0, i_cell=0.0, soc=99.5)
+    assert res_dec["status"] == TP4056State.DISCHARGING.value
+    assert res_dec["led_chrg"] is False
+
+    # Increasing SOC (50.0 -> 50.5) forces CHARGING
+    tp.reset(initial_state=TP4056State.DISCHARGING, initial_soc=50.0)
+    res_inc = tp.step(v_cell=3.7, i_cell=0.0, soc=50.5)
+    assert res_inc["status"] == TP4056State.CHARGING.value
+    assert res_inc["led_chrg"] is True
+
 
 def test_wifi_payload_structure():
     """Verify standard Wi-Fi payload schema emitted by virtual firmware."""

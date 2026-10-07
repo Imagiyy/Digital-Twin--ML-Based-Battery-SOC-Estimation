@@ -59,11 +59,7 @@ class DigitalTwin:
         self.divider = VoltageDivider(ratio=0.5)
         self.adc = ESP32ADC(vref=3.3, bits=adc_bits, noise_sigma_mv=adc_noise_mv, divider_ratio=0.5, rng=self.rng)
         self.current_sensor = CurrentSensor(offset_ma=current_offset_ma, rng=self.rng)
-        initial_i = float(cycle_df["I"].iloc[0]) if len(cycle_df) > 0 else 0.0
-        self.tp4056 = TP4056()
-        if initial_i < -0.05:
-            self.tp4056.current_state = TP4056State.CHARGING
-            self.tp4056._target_state = TP4056State.CHARGING
+        self.tp4056 = TP4056(debounce_samples=1)
         self.firmware = Esp32Firmware(model, window_size=12)
         
         # Coulomb counters state
@@ -87,6 +83,24 @@ class DigitalTwin:
                 initial_soc = float(cycle_df["soc_true"].iloc[0])
             elif "soc_ml" in cycle_df.columns and not pd.isna(cycle_df["soc_ml"].iloc[0]):
                 initial_soc = float(cycle_df["soc_ml"].iloc[0])
+
+        initial_i = float(cycle_df["I"].iloc[0]) if len(cycle_df) > 0 and "I" in cycle_df.columns else 0.0
+        if len(cycle_df) > 1 and "soc_true" in cycle_df.columns:
+            d_soc_init = float(cycle_df["soc_true"].iloc[1] - cycle_df["soc_true"].iloc[0])
+            if d_soc_init > 0.001:
+                initial_state = TP4056State.CHARGING
+            elif d_soc_init < -0.001:
+                initial_state = TP4056State.DISCHARGING
+            elif initial_i < -0.05:
+                initial_state = TP4056State.CHARGING
+            else:
+                initial_state = TP4056State.DISCHARGING
+        elif initial_i < -0.05:
+            initial_state = TP4056State.CHARGING
+        else:
+            initial_state = TP4056State.DISCHARGING
+        self.tp4056.reset(initial_state=initial_state, initial_soc=initial_soc)
+
         self.cc_true_soc = initial_soc
         self.cc_biased_soc = initial_soc
         self.cc_wrong_soc = min(100.0, max(0.0, initial_soc - 10.0)) # 10% offset
@@ -117,9 +131,6 @@ class DigitalTwin:
         """Reset all hardware components and estimators."""
         self.cell.reset()
         self.firmware.reset()
-        initial_i = float(self.cell.df["I"].iloc[0]) if len(self.cell.df) > 0 and "I" in self.cell.df.columns else 0.0
-        init_state = TP4056State.CHARGING if initial_i < -0.05 else TP4056State.DISCHARGING
-        self.tp4056.reset(initial_state=init_state)
 
         initial_soc = 100.0
         if len(self.cell.df) > 0:
@@ -127,6 +138,23 @@ class DigitalTwin:
                 initial_soc = float(self.cell.df["soc_true"].iloc[0])
             elif "soc_ml" in self.cell.df.columns and not pd.isna(self.cell.df["soc_ml"].iloc[0]):
                 initial_soc = float(self.cell.df["soc_ml"].iloc[0])
+
+        initial_i = float(self.cell.df["I"].iloc[0]) if len(self.cell.df) > 0 and "I" in self.cell.df.columns else 0.0
+        if len(self.cell.df) > 1 and "soc_true" in self.cell.df.columns:
+            d_soc_init = float(self.cell.df["soc_true"].iloc[1] - self.cell.df["soc_true"].iloc[0])
+            if d_soc_init > 0.001:
+                init_state = TP4056State.CHARGING
+            elif d_soc_init < -0.001:
+                init_state = TP4056State.DISCHARGING
+            elif initial_i < -0.05:
+                init_state = TP4056State.CHARGING
+            else:
+                init_state = TP4056State.DISCHARGING
+        elif initial_i < -0.05:
+            init_state = TP4056State.CHARGING
+        else:
+            init_state = TP4056State.DISCHARGING
+        self.tp4056.reset(initial_state=init_state, initial_soc=initial_soc)
 
         self.cc_biased_soc = initial_soc
         self.cc_wrong_soc = min(100.0, max(0.0, initial_soc - 10.0))
@@ -149,16 +177,30 @@ class DigitalTwin:
             row = self.cell.df.iloc[cursor]
             target_soc = float(row.get("soc_true", row.get("soc_ml", 100.0)))
             current_i = float(row.get("I", 0.0))
+            if cursor + 1 < len(self.cell.df) and "soc_true" in self.cell.df.columns:
+                d_soc_seek = float(self.cell.df["soc_true"].iloc[cursor + 1] - target_soc)
+            elif cursor > 0 and "soc_true" in self.cell.df.columns:
+                d_soc_seek = float(target_soc - self.cell.df["soc_true"].iloc[cursor - 1])
+            else:
+                d_soc_seek = 0.0
+
+            if d_soc_seek > 0.001:
+                init_state = TP4056State.CHARGING
+            elif d_soc_seek < -0.001:
+                init_state = TP4056State.DISCHARGING
+            elif current_i < -0.05:
+                init_state = TP4056State.CHARGING
+            else:
+                init_state = TP4056State.DISCHARGING
         else:
             target_soc = 100.0
-            current_i = 0.0
+            init_state = TP4056State.DISCHARGING
 
         if pd.isna(target_soc):
             target_soc = 100.0
 
         self.firmware.reset()
-        init_state = TP4056State.CHARGING if current_i < -0.05 else TP4056State.DISCHARGING
-        self.tp4056.reset(initial_state=init_state)
+        self.tp4056.reset(initial_state=init_state, initial_soc=target_soc)
 
         self.cc_biased_soc = target_soc
         self.cc_wrong_soc = min(100.0, max(0.0, target_soc - 10.0))
@@ -188,7 +230,7 @@ class DigitalTwin:
         i_meas = curr_data["i_measured"]
         
         # 5. TP4056 Charger Controller
-        tp_data = self.tp4056.step(v_recon, i_meas)
+        tp_data = self.tp4056.step(v_recon, i_meas, soc=soc_true)
         status = tp_data["status"]
         
         # 6. ESP32 Firmware Execution
