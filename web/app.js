@@ -321,19 +321,21 @@ function updateDashboard(frame) {
     statusEl.style.color = "var(--wn)";
   } else if (frame.status === "CHARGED_STANDBY") {
     statusEl.style.color = "var(--ok)";
+  } else if (frame.status === "EMPTY") {
+    statusEl.style.color = "var(--er)";
   } else {
     statusEl.style.color = "var(--bl)";
   }
 
-  // 4. TP4056 LED indicators
+  // 4. TP4056 LED indicators (Standby icon NEVER lit when empty)
   const ledChrg = $("led-chrg");
   const ledStdby = $("led-stdby");
-  if (frame.led_chrg) {
+  if (frame.led_chrg && frame.status !== "EMPTY") {
     ledChrg.className = "led-indicator active-red";
   } else {
     ledChrg.className = "led-indicator";
   }
-  if (frame.led_stdby) {
+  if (frame.led_stdby && frame.status !== "EMPTY" && (frame.soc_ml === undefined || frame.soc_ml > 5.0)) {
     ledStdby.className = "led-indicator active-green";
   } else {
     ledStdby.className = "led-indicator";

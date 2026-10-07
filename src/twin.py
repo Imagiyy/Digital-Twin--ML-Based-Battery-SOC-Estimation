@@ -85,7 +85,9 @@ class DigitalTwin:
                 initial_soc = float(cycle_df["soc_ml"].iloc[0])
 
         initial_i = float(cycle_df["I"].iloc[0]) if len(cycle_df) > 0 and "I" in cycle_df.columns else 0.0
-        if len(cycle_df) > 1 and "soc_true" in cycle_df.columns:
+        if initial_soc <= 0.5 and initial_i >= -0.05:
+            initial_state = TP4056State.EMPTY
+        elif len(cycle_df) > 1 and "soc_true" in cycle_df.columns:
             d_soc_init = float(cycle_df["soc_true"].iloc[1] - cycle_df["soc_true"].iloc[0])
             if d_soc_init > 0.001:
                 initial_state = TP4056State.CHARGING
@@ -94,11 +96,11 @@ class DigitalTwin:
             elif initial_i < -0.05:
                 initial_state = TP4056State.CHARGING
             else:
-                initial_state = TP4056State.DISCHARGING
+                initial_state = TP4056State.EMPTY if initial_soc <= 0.5 else TP4056State.DISCHARGING
         elif initial_i < -0.05:
             initial_state = TP4056State.CHARGING
         else:
-            initial_state = TP4056State.DISCHARGING
+            initial_state = TP4056State.EMPTY if initial_soc <= 0.5 else TP4056State.DISCHARGING
         self.tp4056.reset(initial_state=initial_state, initial_soc=initial_soc)
 
         self.cc_true_soc = initial_soc
@@ -140,7 +142,9 @@ class DigitalTwin:
                 initial_soc = float(self.cell.df["soc_ml"].iloc[0])
 
         initial_i = float(self.cell.df["I"].iloc[0]) if len(self.cell.df) > 0 and "I" in self.cell.df.columns else 0.0
-        if len(self.cell.df) > 1 and "soc_true" in self.cell.df.columns:
+        if initial_soc <= 0.5 and initial_i >= -0.05:
+            init_state = TP4056State.EMPTY
+        elif len(self.cell.df) > 1 and "soc_true" in self.cell.df.columns:
             d_soc_init = float(self.cell.df["soc_true"].iloc[1] - self.cell.df["soc_true"].iloc[0])
             if d_soc_init > 0.001:
                 init_state = TP4056State.CHARGING
@@ -149,11 +153,11 @@ class DigitalTwin:
             elif initial_i < -0.05:
                 init_state = TP4056State.CHARGING
             else:
-                init_state = TP4056State.DISCHARGING
+                init_state = TP4056State.EMPTY if initial_soc <= 0.5 else TP4056State.DISCHARGING
         elif initial_i < -0.05:
             init_state = TP4056State.CHARGING
         else:
-            init_state = TP4056State.DISCHARGING
+            init_state = TP4056State.EMPTY if initial_soc <= 0.5 else TP4056State.DISCHARGING
         self.tp4056.reset(initial_state=init_state, initial_soc=initial_soc)
 
         self.cc_biased_soc = initial_soc
@@ -184,14 +188,16 @@ class DigitalTwin:
             else:
                 d_soc_seek = 0.0
 
-            if d_soc_seek > 0.001:
+            if target_soc <= 0.5 and current_i >= -0.05:
+                init_state = TP4056State.EMPTY
+            elif d_soc_seek > 0.001:
                 init_state = TP4056State.CHARGING
             elif d_soc_seek < -0.001:
                 init_state = TP4056State.DISCHARGING
             elif current_i < -0.05:
                 init_state = TP4056State.CHARGING
             else:
-                init_state = TP4056State.DISCHARGING
+                init_state = TP4056State.EMPTY if target_soc <= 0.5 else TP4056State.DISCHARGING
         else:
             target_soc = 100.0
             init_state = TP4056State.DISCHARGING

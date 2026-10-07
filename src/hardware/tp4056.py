@@ -21,6 +21,7 @@ class TP4056State(str, Enum):
     CHARGING = "CHARGING"
     DISCHARGING = "DISCHARGING"
     CHARGED_STANDBY = "CHARGED_STANDBY"
+    EMPTY = "EMPTY"
 
 
 class TP4056:
@@ -60,7 +61,7 @@ class TP4056:
             return {
                 "status": self.current_state.value,
                 "led_chrg": (self.current_state == TP4056State.CHARGING),
-                "led_stdby": (self.current_state == TP4056State.CHARGED_STANDBY),
+                "led_stdby": (self.current_state == TP4056State.CHARGED_STANDBY and (soc is None or soc > 5.0)),
             }
 
         # Track SOC rate-of-change if SOC is supplied
@@ -70,28 +71,44 @@ class TP4056:
                 d_soc = float(soc - self._prev_soc)
             self._prev_soc = float(soc)
 
+        # Check empty / depleted cell condition:
+        # If SOC is at or near zero (<= 0.5%) or cell voltage is below cutoff (<= 3.05V)
+        is_empty = False
+        if soc is not None and soc <= 0.5:
+            is_empty = True
+        elif v_cell <= 3.05:
+            is_empty = True
+
+        if is_empty:
+            # If actively charging into the empty cell, show CHARGING; otherwise EMPTY
+            if (d_soc is not None and d_soc > 0.005) or i_cell < -self.current_threshold_a:
+                raw_next_state = TP4056State.CHARGING
+            else:
+                raw_next_state = TP4056State.EMPTY
         # Primary rule:
         # When SOC decreases (d_soc < -0.005) -> DISCHARGING
-        # When SOC increases (d_soc > +0.005) -> CHARGING
-        if d_soc is not None and d_soc < -0.005:
+        elif d_soc is not None and d_soc < -0.005:
             raw_next_state = TP4056State.DISCHARGING
+        # When SOC increases (d_soc > +0.005) -> CHARGING
         elif d_soc is not None and d_soc > 0.005:
-            if v_cell >= self.cv_threshold_v and abs(i_cell) <= self.termination_current_a and (soc is not None and soc >= 98.0):
+            if v_cell >= self.cv_threshold_v and abs(i_cell) <= self.termination_current_a and (soc is not None and soc >= 95.0):
                 raw_next_state = TP4056State.CHARGED_STANDBY
             else:
                 raw_next_state = TP4056State.CHARGING
         elif i_cell > self.current_threshold_a:
             raw_next_state = TP4056State.DISCHARGING
         elif i_cell < -self.current_threshold_a:
-            # Check CV termination: cell voltage near 4.2V and current has tapered below C/10
-            if v_cell >= self.cv_threshold_v and abs(i_cell) <= self.termination_current_a:
+            # Check CV termination: cell voltage near 4.2V, current tapered, and cell near full
+            if v_cell >= self.cv_threshold_v and abs(i_cell) <= self.termination_current_a and (soc is None or soc >= 95.0):
                 raw_next_state = TP4056State.CHARGED_STANDBY
             else:
                 raw_next_state = TP4056State.CHARGING
         else:
             # Low / zero current (|I| <= 0.05 A) and flat SOC:
-            # If cell voltage is full (>= 4.15V) or maintaining charged standby (>= 4.10V) or full SOC (>= 98.0%)
-            if v_cell >= 4.15 or (soc is not None and soc >= 98.0) or (self.current_state == TP4056State.CHARGED_STANDBY and v_cell >= 4.10):
+            # Standby only if voltage is high AND cell is truly full (SOC >= 95%). NEVER when empty!
+            if v_cell >= 4.15 and (soc is None or soc >= 95.0):
+                raw_next_state = TP4056State.CHARGED_STANDBY
+            elif self.current_state == TP4056State.CHARGED_STANDBY and v_cell >= 4.10 and (soc is None or soc >= 95.0):
                 raw_next_state = TP4056State.CHARGED_STANDBY
             else:
                 raw_next_state = TP4056State.DISCHARGING
@@ -114,9 +131,9 @@ class TP4056:
             self._target_state = self.current_state
             self._debounce_count = 0
             
-        # Physical LED indicators
+        # Physical LED indicators (standby icon NEVER lit when empty)
         led_chrg = (self.current_state == TP4056State.CHARGING)
-        led_stdby = (self.current_state == TP4056State.CHARGED_STANDBY)
+        led_stdby = (self.current_state == TP4056State.CHARGED_STANDBY and (soc is None or soc > 5.0))
         
         return {
             "status": self.current_state.value,

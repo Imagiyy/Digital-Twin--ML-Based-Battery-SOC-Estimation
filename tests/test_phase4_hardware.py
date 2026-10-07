@@ -92,6 +92,19 @@ def test_tp4056_state_machine_and_leds():
     assert res_inc["status"] == TP4056State.CHARGING.value
     assert res_inc["led_chrg"] is True
 
+    # 7. Zero SOC -> EMPTY status, standby icon removed (led_stdby is False)
+    tp.reset(initial_state=TP4056State.DISCHARGING, initial_soc=0.0)
+    res_zero = tp.step(v_cell=3.2, i_cell=0.0, soc=0.0)
+    assert res_zero["status"] == TP4056State.EMPTY.value
+    assert res_zero["led_stdby"] is False
+    assert res_zero["led_chrg"] is False
+
+    # Zero SOC when charging starts -> CHARGING
+    res_zero_chg = tp.step(v_cell=3.2, i_cell=-1.0, soc=0.0)
+    assert res_zero_chg["status"] == TP4056State.CHARGING.value
+    assert res_zero_chg["led_chrg"] is True
+    assert res_zero_chg["led_stdby"] is False
+
 
 def test_wifi_payload_structure():
     """Verify standard Wi-Fi payload schema emitted by virtual firmware."""
