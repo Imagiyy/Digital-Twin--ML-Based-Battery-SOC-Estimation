@@ -123,12 +123,13 @@ def run_baselines_experiment():
         
         models = [
             ("MLP 3-16-1 (Proposed)", pred_mlp),
+            ("Random Forest", pred_rf),
+            ("Linear Regression", pred_lin),
             ("SPKF (Sigma-Point Kalman)", pred_spkf),
             ("EKF (Extended Kalman)", pred_ekf),
             ("Coulomb Counting (True SOC0)", pred_cc),
             ("Coulomb Counting (Wrong SOC0 -10%)", pred_cc_wrong),
             ("OCV Table Lookup (V-only)", pred_ocv),
-            ("Linear Regression", pred_lin),
         ]
         
         for name, pred in models:

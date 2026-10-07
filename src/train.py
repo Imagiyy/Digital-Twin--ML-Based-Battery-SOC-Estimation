@@ -19,6 +19,10 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import warnings
+from sklearn.exceptions import ConvergenceWarning
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
+
 from sklearn.neural_network import MLPRegressor
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 

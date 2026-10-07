@@ -161,6 +161,12 @@ async def get_index():
     return HTMLResponse("<h2>SOC Digital Twin Dashboard loading...</h2>")
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def get_favicon():
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "time": time.time(), "cycle": sim.cycle_key}

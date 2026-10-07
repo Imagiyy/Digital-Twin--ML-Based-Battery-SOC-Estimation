@@ -20,7 +20,7 @@ make serve       # 4. Launch live Web Dashboard on http://localhost:8000
 
 To run all automated verification suites (Python pytest + Host-side C tests):
 ```bash
-make test        # Runs all 29 unit & integration tests (prep, model, hardware, server, import)
+make test        # Runs all 39 unit & integration tests (prep, model, hardware, server, import, SOH, Kalman)
 make test-c      # Compiles & verifies host C parity against golden vectors
 ```
 
@@ -35,7 +35,7 @@ run_windows.bat
 ```
 *(Or in PowerShell: `.\run_windows.ps1`)*
 
-This script automatically creates a `.venv` virtual environment, installs dependencies, preprocesses data, trains the MLP model, runs all 29 pytest verification tests, and opens `http://localhost:8000` in your default browser.
+This script automatically creates a `.venv` virtual environment, installs dependencies, preprocesses data, trains the MLP model, runs all 39 pytest verification tests, and opens `http://localhost:8000` in your default browser.
 
 #### 2. Manual Step-by-Step (Command Prompt `cmd.exe`)
 
@@ -72,7 +72,7 @@ Then open **`http://localhost:8000`** in Chrome, Edge, or Firefox.
 #### 3. Running Automated Tests on Windows
 
 ```cmd
-:: Run all 29 Python unit and integration tests
+:: Run all 39 Python unit and integration tests
 python -m pytest tests/ -v
 ```
 
@@ -192,19 +192,43 @@ Evaluated across real NASA 18650 cycling files under standard hardware noise ($5
 | Rank | Algorithm | Category | Avg MAE (%) | MCU Latency (&mu;s) | Flash/RAM (Bytes) | Sensor Bias Resilience | Status |
 |:---:|:---|:---|:---:|:---:|:---:|:---|:---|
 | 🥇 **1** | **MLP 3-16-1 (Proposed)** | Neural Network | **1.25 %** | **6.03 &mu;s** | **348 B** | **EXCELLENT (Bounded < 1.5%)** | **RECOMMENDED** |
-| 🥈 **2** | **SPKF (Sigma-Point Kalman)** | Nonlinear Physics Filter | **6.02 %** | 118.5 &mu;s | 3,400 B | Moderate (Drifts with DC Bias) | Best Physics-Based |
-| 🥉 **3** | **EKF (Extended Kalman)** | Linearized Physics Filter | **6.02 %** | 42.1 &mu;s | 1,850 B | Moderate (Drifts with DC Bias) | Classical Baseline |
-| 4 | **Coulomb Counting** | Current Integration | 2.24 %* | 1.10 &mu;s | 16 B | POOR (>13% drift on long runs) | Unreliable in Field |
-| 5 | **Linear Regression** | Linear Statistical | 3.02 % | 2.40 &mu;s | 32 B | Low | Insufficient Accuracy |
-| 6 | **OCV Lookup Table** | Static Lookup | 9.75 % | 4.50 &mu;s | 120 B | Fails under active load ($IR$ drop) | Rest Only |
+| 🥈 **2** | **Random Forest** | Tree Ensemble | 2.04 % | 24.8 &mu;s | >120,000 B | High (Orthogonal splits) | Heavy ROM Overhead |
+| 🥉 **3** | **Linear Regression** | Linear Statistical | 3.02 % | 2.40 &mu;s | 32 B | Low (Linear limitation) | Underfits Non-linear Knee |
+| 4 | **SPKF (Sigma-Point Kalman)** | Nonlinear Physics Filter | 6.02 % | 118.5 &mu;s | 3,400 B | Moderate (Drifts with DC Bias) | Best Physics-Based |
+| 5 | **EKF (Extended Kalman)** | Linearized Physics Filter | 6.02 % | 42.1 &mu;s | 1,850 B | Moderate (Drifts with DC Bias) | Classical Baseline |
+| 6 | **Coulomb Counting** | Current Integration | 2.24 %* | 1.10 &mu;s | 16 B | POOR (>13% drift on long runs) | Unreliable in Field |
+| 7 | **OCV Lookup Table** | Static Lookup | 9.75 % | 4.50 &mu;s | 120 B | Fails under active load ($IR$ drop) | Rest Only |
 
 *\*Note: Coulomb Counting average MAE shown with perfect initial SOC. When initialized with -10% error, Coulomb Counting error explodes to 11.23% MAE.*
 
 ### Why MLP 3-16-1 is the Best Algorithm for Embedded BMS (ESP32)
 1. **Lowest Estimation Error (1.25% MAE)**: Consistently outperforms physics filters across all C-rates (0.5A to 3.0A).
-2. **Sensor DC Bias Immunity**: Under $+30\text{ mA}$ current sensor offset over multi-hour runs, standard EKF and SPKF state transitions integrate the bias, causing estimated SOC to drift. The MLP's causal input vector ($[V, I, V_{\text{smooth}}]$) anchors the estimate to terminal voltage dynamics, keeping error strictly bounded.
-3. **Ultra-Low Embedded Footprint**: Executes in **6.03 &mu;s** per sample with only **348 bytes** of storage and zero matrix math, leaving 99.9% of the ESP32 CPU free for Wi-Fi and safety monitoring.
-4. **Zero Laboratory Parameter Tuning**: EKF/SPKF require extensive climatic chamber testing to calibrate $R_0, R_1, C_1$ across temperatures and SOC levels, whereas the MLP trains end-to-end directly from standard cycling logs.
+2. **Comparison with ML Baselines (Random Forest vs Linear Regression)**:
+   - **Linear Regression (3.02% MAE)**: Lacks capacity to model the flat central plateau and non-linear exponential knees of Li-ion open-circuit voltage curves.
+   - **Random Forest (2.04% MAE)**: Effectively partitions non-linear feature spaces, but the 30-tree ensemble requires >120 KB flash memory and produces non-continuous step estimates, making it impractical for resource-constrained microcontrollers.
+   - **Proposed MLP 3-16-1 (1.25% MAE)**: Tanh hidden units generate smooth continuous predictions, achieving the lowest error while requiring only 81 parameters (348 bytes) and 6.03 &mu;s latency.
+3. **Sensor DC Bias Immunity**: Under $+30\text{ mA}$ current sensor offset over multi-hour runs, standard EKF and SPKF state transitions integrate the bias, causing estimated SOC to drift. The MLP's causal input vector ($[V, I, V_{\text{smooth}}]$) anchors the estimate to terminal voltage dynamics, keeping error strictly bounded.
+4. **Ultra-Low Embedded Footprint**: Executes in **6.03 &mu;s** per sample with only **348 bytes** of storage and zero matrix math, leaving 99.9% of the ESP32 CPU free for Wi-Fi and safety monitoring.
+5. **Zero Laboratory Parameter Tuning**: EKF/SPKF require extensive climatic chamber testing to calibrate $R_0, R_1, C_1$ across temperatures and SOC levels, whereas the MLP trains end-to-end directly from standard cycling logs.
+
+---
+
+### Battery Estimation Methodologies: Modern AI & Hybrid Frameworks
+
+#### 4. Machine Learning / AI Approaches
+- **LSTM (Long Short-Term Memory)**: Learns degradation patterns from dynamic time-series sequences.
+- **Random Forest / Gradient Boosting**: Non-linear mapping of extracted features &rarr; SOH (and SOC tabular baselines).
+- **Neural Networks (MLP/CNN)**: End-to-end learning directly on voltage, current, temperature, and cycle count.
+- **Pros**: No explicit physical/electrochemical model needed; naturally captures complex multi-physics degradation.
+- **Cons**: Requires large labeled training datasets; higher computational and memory overhead for SOH on edge microcontrollers.
+
+#### 5. Hybrid Methods (Industry Standard)
+Combines two or more complementary physics-based and data-driven methods:
+- **Capacity + EIS**: Periodic electrochemical impedance spectroscopy paired with continuous Ah capacity tracking.
+- **Model-Based + ML**: Physical Kalman filter (EKF/SPKF) primary state observer + Neural Network correction layer for residual error.
+- **Incremental Capacity Analysis (ICA) + ML**: Differential capacity ($dQ/dV$) peak feature extraction paired with ML regression for SOH estimation.
+- **Pros**: Combines thermodynamic physical bounds with data-driven non-linear residual correction.
+- **Cons**: Requires complex high-frequency instrumentation (AC perturbation) and multi-parameter co-calibration.
 
 ---
 
