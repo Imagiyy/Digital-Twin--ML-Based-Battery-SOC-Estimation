@@ -57,8 +57,14 @@ class TP4056:
             else:
                 raw_next_state = TP4056State.CHARGING
         else:
-            # Low / zero current: if voltage is high (>4.15V) it is standby, else standby
-            raw_next_state = TP4056State.CHARGED_STANDBY if v_cell >= 4.15 else TP4056State.DISCHARGING
+            # Low / zero current:
+            # If cell was already charging or charged, stay in CHARGED_STANDBY (do not spuriously discharge)
+            if self.current_state in (TP4056State.CHARGING, TP4056State.CHARGED_STANDBY):
+                raw_next_state = TP4056State.CHARGED_STANDBY
+            elif v_cell >= 4.15:
+                raw_next_state = TP4056State.CHARGED_STANDBY
+            else:
+                raw_next_state = TP4056State.DISCHARGING
             
         # Hysteresis / Debounce logic
         if self.debounce_samples <= 1:

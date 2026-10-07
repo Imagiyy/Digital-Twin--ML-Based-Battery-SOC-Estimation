@@ -161,6 +161,31 @@ function setupControls() {
     btnPlay.textContent = "Pause";
   });
 
+  const btnJumpCharge = $("btn-jump-charge");
+  if (btnJumpCharge) {
+    btnJumpCharge.addEventListener("click", () => {
+      const sel = $("sel-cycle");
+      const currentVal = sel ? sel.value : "pair10";
+      if (currentVal === "pair10") {
+        sendControl("seek", 4288);
+      } else if (currentVal === "pair20") {
+        sendControl("seek", 2260);
+      } else if (currentVal === "pair30") {
+        sendControl("seek", 1600);
+      } else if (currentVal.startsWith("charge")) {
+        sendControl("seek", 0);
+      } else {
+        if (sel) {
+          sel.value = "charge10";
+          sel.dispatchEvent(new Event("change"));
+        }
+      }
+      resetCharts();
+      isPlaying = true;
+      btnPlay.textContent = "Pause";
+    });
+  }
+
   $("sel-cycle").addEventListener("change", (e) => {
     resetCharts();
     sendControl("select_cycle", e.target.value);

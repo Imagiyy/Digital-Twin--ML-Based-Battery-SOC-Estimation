@@ -273,6 +273,17 @@ def parse_and_predict_custom_data(
     # Compute Feature 3: Strictly causal moving average (12-sample expanding window)
     v_smooth = compute_causal_moving_average(v_arr, window_samples=12)
 
+    # Auto-detect charge profile with positive current convention:
+    # If cell voltage rises significantly (e.g. V_end - V_start > 0.08V) or SOC_true rises (> 5%),
+    # but current was logged as positive (+), invert current to negative to match
+    # the model's training and physical BMS convention (Discharge +, Charge -).
+    v_net_delta = float(v_arr[-1] - v_arr[0]) if len(v_arr) > 1 else 0.0
+    soc_net_delta = float(soc_true_arr[-1] - soc_true_arr[0]) if (has_ground_truth and len(soc_true_arr) > 1 and not np.isnan(soc_true_arr[-1]) and not np.isnan(soc_true_arr[0])) else 0.0
+    mean_i = float(np.mean(i_arr)) if len(i_arr) > 0 else 0.0
+
+    if (v_net_delta > 0.08 or soc_net_delta > 5.0) and mean_i > 0.05:
+        i_arr = -np.abs(i_arr)
+
     # Load model if not provided
     if model is None:
         model = PureNumpyMLP()

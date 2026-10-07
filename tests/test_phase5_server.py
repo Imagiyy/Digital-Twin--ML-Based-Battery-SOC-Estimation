@@ -26,7 +26,10 @@ def test_cycles_endpoint(client):
     assert res.status_code == 200
     data = res.json()
     assert "held_out" in data
-    assert len(data["held_out"]) == 4
+    assert len(data["held_out"]) >= 4
+    held_ids = [c["id"] for c in data["held_out"]]
+    assert "pair10" in held_ids
+    assert "charge10" in held_ids
 
 
 def test_control_and_params_endpoints(client):

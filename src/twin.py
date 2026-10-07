@@ -26,7 +26,7 @@ from src.hardware.cell import CellTwin
 from src.hardware.divider import VoltageDivider
 from src.hardware.adc import ESP32ADC
 from src.hardware.current_sensor import CurrentSensor
-from src.hardware.tp4056 import TP4056
+from src.hardware.tp4056 import TP4056, TP4056State
 from src.hardware.esp32 import Esp32Firmware
 from src.kalman import BatteryECM, ExtendedKalmanFilter, SigmaPointKalmanFilter
 from src.soh import CombinedSOHEstimator
@@ -59,7 +59,11 @@ class DigitalTwin:
         self.divider = VoltageDivider(ratio=0.5)
         self.adc = ESP32ADC(vref=3.3, bits=adc_bits, noise_sigma_mv=adc_noise_mv, divider_ratio=0.5, rng=self.rng)
         self.current_sensor = CurrentSensor(offset_ma=current_offset_ma, rng=self.rng)
+        initial_i = float(cycle_df["I"].iloc[0]) if len(cycle_df) > 0 else 0.0
         self.tp4056 = TP4056()
+        if initial_i < -0.05:
+            self.tp4056.current_state = TP4056State.CHARGING
+            self.tp4056._target_state = TP4056State.CHARGING
         self.firmware = Esp32Firmware(model, window_size=12)
         
         # Coulomb counters state
@@ -108,6 +112,14 @@ class DigitalTwin:
         """Reset all hardware components and estimators."""
         self.cell.reset()
         self.firmware.reset()
+        initial_i = float(self.cell.df["I"].iloc[0]) if len(self.cell.df) > 0 else 0.0
+        if initial_i < -0.05:
+            self.tp4056.current_state = TP4056State.CHARGING
+            self.tp4056._target_state = TP4056State.CHARGING
+        else:
+            self.tp4056.current_state = TP4056State.DISCHARGING
+            self.tp4056._target_state = TP4056State.DISCHARGING
+        self.tp4056._debounce_count = 0
         initial_soc = float(self.cell.df["soc_true"].iloc[0])
         self.cc_biased_soc = initial_soc
         self.cc_wrong_soc = min(100.0, max(0.0, initial_soc - 10.0))

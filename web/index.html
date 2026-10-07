@@ -153,13 +153,17 @@
       <section class="controls-panel">
         <button id="btn-play-pause">Pause</button>
         <button id="btn-restart">Restart Twin</button>
+        <button id="btn-jump-charge" style="background:var(--card);color:var(--fg);border:1px solid var(--bd);" title="Jump directly to the charge phase">⚡ Jump to Charge</button>
 
         <div class="ctl-group">
           <label>Cycle Selector</label>
           <select id="sel-cycle">
-            <option value="pair10" selected>Cycle @ 1.0 A: Discharge 10 + Charge 10 (Held-out)</option>
-            <option value="pair20">Cycle @ 2.0 A: Discharge 20 + Charge 20 (Held-out)</option>
-            <option value="pair30">Cycle @ 3.0 A: Discharge 30 + Charge 30 (Held-out)</option>
+            <option value="pair10" selected>Cycle @ 1.0 A: Discharge 10 + Charge 10 (Held-out Pair)</option>
+            <option value="charge10">⚡ Charge 10 @ 1.0 A: Pure CC-CV Charge (Held-out)</option>
+            <option value="pair20">Cycle @ 2.0 A: Discharge 20 + Charge 20 (Held-out Pair)</option>
+            <option value="charge20">⚡ Charge 20 @ 2.0 A: Pure CC-CV Charge (Held-out)</option>
+            <option value="pair30">Cycle @ 3.0 A: Discharge 30 + Charge 30 (Held-out Pair)</option>
+            <option value="charge30">⚡ Charge 30 @ 3.0 A: Pure CC-CV Charge (Held-out)</option>
             <option value="dis02">Discharge 02 @ 0.5 A (Held-out)</option>
           </select>
         </div>
@@ -850,6 +854,6 @@ SOC(t) = SOC(0) - (1 / C_nominal) * &int; i(t) dt
     &copy; 2026 Amrita School of Engineering, EEE &middot; Battery Management Systems &middot; Digital Twin Implementation
   </footer>
 
-  <script src="/static/app.js?v=2.2"></script>
+  <script src="/static/app.js?v=2.3"></script>
 </body>
 </html>

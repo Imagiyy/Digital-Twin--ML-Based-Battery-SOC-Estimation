@@ -110,6 +110,15 @@ class SimulationManager:
         elif cycle_key == "pair30":
             df = build_cycle_pair(self.dataset["Discharge_30.csv"], self.dataset["Load_30.csv"])
             title = "Pair 30 (3.0 A Pair)"
+        elif cycle_key in ("charge10", "load10"):
+            df = self.dataset["Load_10.csv"]
+            title = "Charge 10 (1.0 A Pure Charge)"
+        elif cycle_key in ("charge20", "load20"):
+            df = self.dataset["Load_20.csv"]
+            title = "Charge 20 (2.0 A Pure Charge)"
+        elif cycle_key in ("charge30", "load30"):
+            df = self.dataset["Load_30.csv"]
+            title = "Charge 30 (3.0 A Pure Charge)"
         elif cycle_key == "dis02":
             df = self.dataset["Discharge_02.csv"]
             title = "Discharge 02 (0.5 A)"
@@ -176,9 +185,12 @@ async def health():
 async def list_cycles():
     """List available replay cycles."""
     held_out = [
-        {"id": "pair10", "name": "Cycle @ 1.0 A: Discharge 10 + Charge 10 (Held-out)", "rate_a": 1.0, "is_pair": True},
-        {"id": "pair20", "name": "Cycle @ 2.0 A: Discharge 20 + Charge 20 (Held-out)", "rate_a": 2.0, "is_pair": True},
-        {"id": "pair30", "name": "Cycle @ 3.0 A: Discharge 30 + Charge 30 (Held-out)", "rate_a": 3.0, "is_pair": True},
+        {"id": "pair10", "name": "Cycle @ 1.0 A: Discharge 10 + Charge 10 (Held-out Pair)", "rate_a": 1.0, "is_pair": True},
+        {"id": "charge10", "name": "⚡ Charge 10 @ 1.0 A: Pure CC-CV Charge (Held-out)", "rate_a": 1.0, "is_pair": False},
+        {"id": "pair20", "name": "Cycle @ 2.0 A: Discharge 20 + Charge 20 (Held-out Pair)", "rate_a": 2.0, "is_pair": True},
+        {"id": "charge20", "name": "⚡ Charge 20 @ 2.0 A: Pure CC-CV Charge (Held-out)", "rate_a": 2.0, "is_pair": False},
+        {"id": "pair30", "name": "Cycle @ 3.0 A: Discharge 30 + Charge 30 (Held-out Pair)", "rate_a": 3.0, "is_pair": True},
+        {"id": "charge30", "name": "⚡ Charge 30 @ 3.0 A: Pure CC-CV Charge (Held-out)", "rate_a": 3.0, "is_pair": False},
         {"id": "dis02",  "name": "Discharge 02 @ 0.5 A (Held-out)", "rate_a": 0.5, "is_pair": False},
     ]
     custom_cycles = []
