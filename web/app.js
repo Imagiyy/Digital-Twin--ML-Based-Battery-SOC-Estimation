@@ -539,6 +539,7 @@ function setupCustomImport() {
   const fileInput = $("file-custom-input");
   const fileNameDisplay = $("dropzone-file-name");
   const btnSample = $("btn-sample-csv");
+  const btnSampleXlsx = $("btn-sample-xlsx");
   const btnLoadProfile = $("btn-load-sample-profile");
   const btnToggleEditor = $("btn-toggle-editor");
   const editorContainer = $("raw-editor-container");
@@ -547,6 +548,7 @@ function setupCustomImport() {
   const alertMsg = $("custom-alert-msg");
   const resultsSec = $("custom-results-section");
   const btnExport = $("btn-export-custom-csv");
+  const btnExportExcel = $("btn-export-custom-excel");
   const btnReplayTwin = $("btn-replay-in-twin");
 
   if (dropzone && fileInput) {
@@ -581,13 +583,23 @@ function setupCustomImport() {
     if (fileNameDisplay) {
       fileNameDisplay.innerHTML = `<strong>Selected:</strong> ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
     }
+    const isExcel = file.name.toLowerCase().endsWith(".xlsx") || file.name.toLowerCase().endsWith(".xls");
     const reader = new FileReader();
-    reader.onload = (evt) => {
-      lastUploadedCsvContent = evt.target.result;
-      if (txtRaw) txtRaw.value = lastUploadedCsvContent;
-      hideAlert();
-    };
-    reader.readAsText(file);
+    if (isExcel) {
+      reader.onload = (evt) => {
+        lastUploadedCsvContent = evt.target.result;
+        if (txtRaw) txtRaw.value = `[Excel Spreadsheet: ${file.name} loaded (${(file.size / 1024).toFixed(1)} KB)]\nClick "Predict SOC" to evaluate with Neural Network Digital Twin.`;
+        hideAlert();
+      };
+      reader.readAsDataURL(file);
+    } else {
+      reader.onload = (evt) => {
+        lastUploadedCsvContent = evt.target.result;
+        if (txtRaw) txtRaw.value = lastUploadedCsvContent;
+        hideAlert();
+      };
+      reader.readAsText(file);
+    }
   }
 
   function showAlert(msg, isError = false) {
@@ -605,6 +617,12 @@ function setupCustomImport() {
   if (btnSample) {
     btnSample.addEventListener("click", () => {
       window.location.href = "/api/sample-csv";
+    });
+  }
+
+  if (btnSampleXlsx) {
+    btnSampleXlsx.addEventListener("click", () => {
+      window.location.href = "/api/sample-xlsx";
     });
   }
 
@@ -709,6 +727,12 @@ function setupCustomImport() {
   if (btnExport) {
     btnExport.addEventListener("click", () => {
       window.location.href = "/api/export-custom";
+    });
+  }
+
+  if (btnExportExcel) {
+    btnExportExcel.addEventListener("click", () => {
+      window.location.href = "/api/export-custom-excel";
     });
   }
 

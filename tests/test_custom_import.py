@@ -1,5 +1,6 @@
 """Unit and Integration Tests for Custom Data Import & ML SOC Prediction."""
 
+import io
 import json
 import pytest
 import numpy as np
@@ -173,3 +174,63 @@ def test_api_predict_and_export_endpoints(client):
     assert "soc_ml" in frame
     assert "chain" in frame
     assert frame["chain"]["cell_v"] > 0
+
+
+def test_excel_template_and_parsing(tmp_path):
+    """Test generating sample Excel file, saving to disk, parsing, and predicting."""
+    from src.custom_import import generate_sample_excel_template, export_predictions_excel
+    excel_bytes = generate_sample_excel_template(50)
+    assert len(excel_bytes) > 1000
+    assert excel_bytes.startswith(b"PK\x03\x04")
+
+    excel_file = tmp_path / "test_battery.xlsx"
+    excel_file.write_bytes(excel_bytes)
+
+    # 1. Test parsing directly from file path
+    res = parse_and_predict_custom_data(excel_file)
+    assert res["status"] == "success"
+    assert res["stats"]["sample_count"] == 50
+    assert len(res["series"]["predicted_soc"]) == 50
+
+    # 2. Test parsing from raw bytes
+    res_b = parse_and_predict_custom_data(excel_bytes, filename="test.xlsx")
+    assert res_b["status"] == "success"
+    assert res_b["stats"]["sample_count"] == 50
+
+    # 3. Test export to Excel
+    exp_bytes = export_predictions_excel(res["df_processed"])
+    assert len(exp_bytes) > 1000
+    assert exp_bytes.startswith(b"PK\x03\x04")
+    df_readback = pd.read_excel(io.BytesIO(exp_bytes))
+    assert "Predicted_SOC_percent" in df_readback.columns
+
+
+def test_api_sample_xlsx_and_export_excel(client):
+    """Test GET /api/sample-xlsx and GET /api/export-custom-excel."""
+    import base64
+    from src.custom_import import generate_sample_excel_template
+
+    # 1. Download Excel template
+    res_tpl = client.get("/api/sample-xlsx")
+    assert res_tpl.status_code == 200
+    assert "spreadsheetml" in res_tpl.headers["content-type"]
+    assert len(res_tpl.content) > 1000
+
+    # 2. Upload Excel as base64 data URL
+    b64_content = "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64," + base64.b64encode(res_tpl.content).decode("ascii")
+    res_pred = client.post("/api/predict-custom", json={
+        "filename": "my_uploaded_excel.xlsx",
+        "content": b64_content,
+        "load_into_twin": False,
+    })
+    assert res_pred.status_code == 200
+    pred_data = res_pred.json()
+    assert pred_data["status"] == "success"
+    assert pred_data["filename"] == "my_uploaded_excel.xlsx"
+
+    # 3. Export predictions to Excel
+    res_exp = client.get("/api/export-custom-excel")
+    assert res_exp.status_code == 200
+    assert "spreadsheetml" in res_exp.headers["content-type"]
+    assert len(res_exp.content) > 1000
+

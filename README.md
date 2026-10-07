@@ -92,6 +92,43 @@ firmware\test\test_c_parity.exe
 
 *(Note: If you have Make installed via Chocolatey `choco install make` or Winget `winget install ezwinports.make`, you can also use `make prep`, `make train`, `make serve`, `make test` directly on Windows).*
 
+#### 5. Testing Using Excel (.xlsx / .xls) Files
+
+You can test custom battery cycle data using Excel spreadsheets through either the **Python CLI Tool** or the **Live Web Dashboard**:
+
+##### A. Command Line Interface (CLI)
+
+A pre-packaged Excel test file [`sample_battery_data.xlsx`](file:///home/abrar/Downloads/BMS/proj/sample_battery_data.xlsx) is included in the project root:
+
+```bash
+# 1. Run inference directly on an Excel file
+python src/predict_excel.py sample_battery_data.xlsx
+
+# 2. Run inference, export predictions to Excel, and generate an evaluation chart
+python src/predict_excel.py sample_battery_data.xlsx --export predictions.xlsx --plot report/figures/excel_test_result.png
+
+# 3. Generate a fresh Excel template with predefined columns
+python src/predict_excel.py --generate-sample my_test_template.xlsx --samples 150
+```
+
+##### B. Web Dashboard (Drag-and-Drop)
+
+1. Run `make serve` or `python -m src.server` and open **`http://localhost:8000`**.
+2. Navigate to the **"Custom Data Import"** tab.
+3. Click or drag-and-drop your `.xlsx` file into the upload zone.
+4. Click **"🚀 Predict SOC"**:
+   - The neural network computes real-time predictions.
+   - Shows summary KPIs, voltage/current charts, and MAE/RMSE scorecard (if `SOC_True` column is present).
+   - Click **"📊 Export Excel (.xlsx)"** to download the annotated spreadsheet.
+   - Check **"Load into Live Digital Twin replay"** to stream your Excel cycle live into the telemetry dashboard.
+
+##### Expected Excel Columns:
+- **`Time`** (or `Time_s`, `t`): Timestamp in seconds.
+- **`Voltage`** (or `V`, `Vbat`): Cell terminal voltage in Volts (e.g. 3.0 V – 4.2 V).
+- **`Current`** (or `I`, `Amps`): Load current in Amperes (positive for discharge, negative for charge).
+- **`Temperature`** *(Optional)*: Cell temperature in °C (defaults to 25.0 °C if omitted).
+- **`SOC_True`** *(Optional)*: Reference actual SOC % (if provided, computes validation MAE & RMSE).
+
 ---
 
 ## 1. Project Overview & Physical Objective

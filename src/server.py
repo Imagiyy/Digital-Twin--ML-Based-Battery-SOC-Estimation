@@ -498,6 +498,18 @@ async def get_sample_csv():
     )
 
 
+@app.get("/api/sample-xlsx")
+async def get_sample_xlsx():
+    """Download predefined sample Excel (.xlsx) template with default columns."""
+    from src.custom_import import generate_sample_excel_template
+    excel_bytes = generate_sample_excel_template()
+    return StreamingResponse(
+        io.BytesIO(excel_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=soc_sample_template.xlsx"}
+    )
+
+
 @app.post("/api/predict-custom")
 async def predict_custom_data(req: CustomDataRequest):
     """Import custom data with predefined default columns and arbitrary values, predict SOC."""
@@ -538,7 +550,7 @@ async def load_custom_into_twin():
 
 @app.get("/api/export-custom")
 async def export_custom_csv():
-    """Export current custom dataset with model SOC predictions."""
+    """Export current custom dataset with model SOC predictions as CSV."""
     from src.custom_import import export_predictions_csv
     if sim.custom_df is None:
         raise HTTPException(status_code=400, detail="No custom dataset available to export.")
@@ -547,6 +559,22 @@ async def export_custom_csv():
     return StreamingResponse(
         iter([csv_text]),
         media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@app.get("/api/export-custom-excel")
+async def export_custom_excel():
+    """Export current custom dataset with model SOC predictions as Excel (.xlsx)."""
+    from src.custom_import import export_predictions_excel
+    if sim.custom_df is None:
+        raise HTTPException(status_code=400, detail="No custom dataset available to export.")
+    excel_bytes = export_predictions_excel(sim.custom_df)
+    stem = Path(sim.custom_filename).stem if sim.custom_filename else "custom"
+    filename = f"predictions_{stem}.xlsx"
+    return StreamingResponse(
+        io.BytesIO(excel_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 

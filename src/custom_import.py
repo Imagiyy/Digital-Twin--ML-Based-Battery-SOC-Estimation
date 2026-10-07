@@ -12,9 +12,10 @@ Supports:
 - Export of predictions to CSV.
 """
 
+import base64
 import io
 from pathlib import Path
-from typing import Dict, Any, Tuple, Optional, List
+from typing import Dict, Any, Tuple, Optional, List, Union
 import numpy as np
 import pandas as pd
 
@@ -36,52 +37,59 @@ COLUMN_ALIASES = {
 }
 
 
-def generate_sample_csv_template(n_samples: int = 120, dt_s: float = 5.0) -> str:
-    """Generate a clean CSV string with predefined default columns and realistic arbitrary Li-ion profile.
-    
-    Default columns: Time, Voltage, Current, Temperature
-    """
+def generate_sample_dataframe(n_samples: int = 120, dt_s: float = 5.0) -> pd.DataFrame:
+    """Generate a clean synthetic DataFrame with predefined default columns and realistic Li-ion profile."""
     t = np.arange(n_samples) * dt_s
-    # Arbitrary realistic discharge profile: 4.18V down to 3.25V with a 1.5A load pulse
     progress = np.linspace(0.0, 1.0, n_samples)
     # Non-linear OCV-like curve with IR drop
     v_base = 4.18 - 0.70 * progress - 0.23 * (progress ** 3)
-    # Add minor noise
     noise = np.sin(progress * 20.0) * 0.005
     v = np.round(v_base + noise, 3)
-    # Current: 1.5 A constant discharge with a rest period near the middle
     i = np.where((progress > 0.45) & (progress < 0.55), 0.0, 1.5)
     temp = np.round(25.0 + 3.5 * progress, 1)
-    
-    # Ground truth reference SOC (%) for evaluation
     soc_ref = np.round(np.clip(100.0 * (1.0 - progress), 0.0, 100.0), 1)
 
-    df_sample = pd.DataFrame({
+    return pd.DataFrame({
         "Time": t,
         "Voltage": v,
         "Current": i,
         "Temperature": temp,
         "SOC_True": soc_ref,
     })
-    
+
+
+def generate_sample_csv_template(n_samples: int = 120, dt_s: float = 5.0) -> str:
+    """Generate a clean CSV string with predefined default columns and realistic arbitrary Li-ion profile."""
+    df_sample = generate_sample_dataframe(n_samples=n_samples, dt_s=dt_s)
     buf = io.StringIO()
     df_sample.to_csv(buf, index=False)
     return buf.getvalue()
 
 
+def generate_sample_excel_template(n_samples: int = 120, dt_s: float = 5.0) -> bytes:
+    """Generate a clean Excel (.xlsx) file bytes with predefined default columns and realistic arbitrary Li-ion profile."""
+    df_sample = generate_sample_dataframe(n_samples=n_samples, dt_s=dt_s)
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df_sample.to_excel(writer, index=False, sheet_name="Battery_Telemetry")
+    return buf.getvalue()
+
+
 def parse_and_predict_custom_data(
-    content: str,
+    content: Union[str, bytes, Path, pd.DataFrame],
     filename: str = "custom_data.csv",
     model: Optional[PureNumpyMLP] = None,
 ) -> Dict[str, Any]:
     """Parse custom battery data with predefined columns and arbitrary values, and predict SOC.
     
+    Supports CSV, TSV, and Excel (.xlsx, .xls) formats from string, bytes, file path, or DataFrame.
+    
     Parameters
     ----------
-    content : str
-        CSV, TSV, or semicolon-delimited text content.
+    content : str, bytes, Path, or pd.DataFrame
+        CSV/TSV text content, Base64 data URL, Excel raw bytes, filepath, or DataFrame.
     filename : str
-        Source filename for identification.
+        Source filename for identification and format detection.
     model : PureNumpyMLP, optional
         Preloaded model instance. If None, initialized from weights.
         
@@ -95,14 +103,48 @@ def parse_and_predict_custom_data(
         - preview: first 10 and last 10 rows
         - df_processed: DataFrame ready for live simulation replay
     """
-    if not content or not content.strip():
+    if content is None:
         raise ValueError("Uploaded file content is empty.")
 
-    # Read CSV with automatic delimiter sniffing (supports comma, semicolon, tab)
-    try:
-        df_raw = pd.read_csv(io.StringIO(content), sep=None, engine="python")
-    except Exception as e:
-        raise ValueError(f"Failed to parse CSV data: {str(e)}")
+    # Parse into pd.DataFrame based on input type and format
+    df_raw: pd.DataFrame
+    if isinstance(content, pd.DataFrame):
+        df_raw = content.copy()
+    elif isinstance(content, (str, Path)) and Path(str(content)).is_file():
+        p = Path(str(content))
+        filename = p.name
+        if p.suffix.lower() in [".xlsx", ".xls"]:
+            df_raw = pd.read_excel(p)
+        else:
+            df_raw = pd.read_csv(p, sep=None, engine="python")
+    elif isinstance(content, bytes):
+        if filename.lower().endswith((".xlsx", ".xls")) or content.startswith(b"PK\x03\x04"):
+            df_raw = pd.read_excel(io.BytesIO(content))
+        else:
+            df_raw = pd.read_csv(io.BytesIO(content), sep=None, engine="python")
+    elif isinstance(content, str):
+        if not content.strip():
+            raise ValueError("Uploaded file content is empty.")
+        if content.startswith("data:") and ";base64," in content:
+            _, b64_str = content.split(";base64,", 1)
+            raw_b = base64.b64decode(b64_str)
+            if filename.lower().endswith((".xlsx", ".xls")) or raw_b.startswith(b"PK\x03\x04"):
+                df_raw = pd.read_excel(io.BytesIO(raw_b))
+            else:
+                df_raw = pd.read_csv(io.BytesIO(raw_b), sep=None, engine="python")
+        elif filename.lower().endswith((".xlsx", ".xls")):
+            try:
+                raw_b = base64.b64decode(content.strip())
+                df_raw = pd.read_excel(io.BytesIO(raw_b))
+            except Exception:
+                raise ValueError("Could not decode Excel (.xlsx) file data.")
+        else:
+            try:
+                df_raw = pd.read_csv(io.StringIO(content), sep=None, engine="python")
+            except Exception as e:
+                raise ValueError(f"Failed to parse CSV data: {str(e)}")
+    else:
+        raise ValueError(f"Unsupported content type: {type(content)}")
 
     if df_raw.empty:
         raise ValueError("Parsed dataset contains 0 rows.")
@@ -337,8 +379,8 @@ def parse_and_predict_custom_data(
     }
 
 
-def export_predictions_csv(df_processed: pd.DataFrame) -> str:
-    """Export processed dataframe with predictions as CSV string."""
+def build_export_dataframe(df_processed: pd.DataFrame) -> pd.DataFrame:
+    """Build standardized export dataframe with original metrics and predictions."""
     export_df = pd.DataFrame({
         "Time_s": df_processed["time_s"],
         "Voltage_V": df_processed["V"],
@@ -351,7 +393,22 @@ def export_predictions_csv(df_processed: pd.DataFrame) -> str:
     if "soc_true" in df_processed and not np.all(df_processed["soc_true"] == df_processed["soc_ml"]):
         export_df["True_SOC_percent"] = df_processed["soc_true"]
         export_df["Absolute_Error_percent"] = np.abs(df_processed["soc_true"] - df_processed["soc_ml"])
+    return export_df
 
+
+def export_predictions_csv(df_processed: pd.DataFrame) -> str:
+    """Export processed dataframe with predictions as CSV string."""
+    export_df = build_export_dataframe(df_processed)
     buf = io.StringIO()
     export_df.to_csv(buf, index=False)
     return buf.getvalue()
+
+
+def export_predictions_excel(df_processed: pd.DataFrame) -> bytes:
+    """Export processed dataframe with predictions as Excel (.xlsx) file bytes."""
+    export_df = build_export_dataframe(df_processed)
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        export_df.to_excel(writer, index=False, sheet_name="SOC_Predictions")
+    return buf.getvalue()
+

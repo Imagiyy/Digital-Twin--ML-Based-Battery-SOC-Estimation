@@ -63,3 +63,7 @@ $RECYCLE.BIN/
 
 # Logs and runtime files
 *.log
+
+# Prediction export outputs
+predictions_*.xlsx
+predictions_*.csv
