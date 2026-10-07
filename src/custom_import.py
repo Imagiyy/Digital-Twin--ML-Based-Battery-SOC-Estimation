@@ -123,21 +123,36 @@ def parse_and_predict_custom_data(
         else:
             df_raw = pd.read_csv(io.BytesIO(content), sep=None, engine="python")
     elif isinstance(content, str):
-        if not content.strip():
+        content_clean = content.strip()
+        if not content_clean:
             raise ValueError("Uploaded file content is empty.")
-        if content.startswith("data:") and ";base64," in content:
+        if content_clean.startswith("[") and ("Excel" in content_clean or "loaded" in content_clean):
+            raise ValueError(
+                "Received editor placeholder text instead of file binary content. "
+                "Please re-select your .xlsx file in the upload zone."
+            )
+        if Path(content_clean).is_file():
+            p = Path(content_clean)
+            if p.suffix.lower() in [".xlsx", ".xls"]:
+                df_raw = pd.read_excel(p)
+            else:
+                df_raw = pd.read_csv(p, sep=None, engine="python")
+        elif content.startswith("data:") and ";base64," in content:
             _, b64_str = content.split(";base64,", 1)
-            raw_b = base64.b64decode(b64_str)
-            if filename.lower().endswith((".xlsx", ".xls")) or raw_b.startswith(b"PK\x03\x04"):
+            raw_b = base64.b64decode(b64_str.strip())
+            if filename.lower().endswith((".xlsx", ".xls")) or raw_b.startswith(b"PK\x03\x04") or raw_b.startswith(b"\xd0\xcf\x11\xe0"):
                 df_raw = pd.read_excel(io.BytesIO(raw_b))
             else:
                 df_raw = pd.read_csv(io.BytesIO(raw_b), sep=None, engine="python")
         elif filename.lower().endswith((".xlsx", ".xls")):
             try:
-                raw_b = base64.b64decode(content.strip())
+                raw_b = base64.b64decode(content_clean)
                 df_raw = pd.read_excel(io.BytesIO(raw_b))
-            except Exception:
-                raise ValueError("Could not decode Excel (.xlsx) file data.")
+            except Exception as exc:
+                raise ValueError(
+                    f"Could not decode Excel (.xlsx) file data. Ensure you uploaded a valid binary .xlsx file "
+                    f"or use the Python CLI: `python src/predict_excel.py {filename}`. (Details: {str(exc)})"
+                )
         else:
             try:
                 df_raw = pd.read_csv(io.StringIO(content), sep=None, engine="python")

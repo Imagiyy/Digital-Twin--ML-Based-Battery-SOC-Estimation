@@ -20,7 +20,7 @@ import json
 from pathlib import Path
 import time
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -527,6 +527,37 @@ async def predict_custom_data(req: CustomDataRequest):
         sim.custom_mean_i = float(df_processed["I"].abs().mean())
         
         if req.load_into_twin:
+            sim.load_custom_df(df_processed, sim.custom_title, sim.custom_filename)
+            
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/upload-file")
+async def upload_custom_file(
+    file: UploadFile = File(...),
+    load_into_twin: bool = Form(False)
+):
+    """Direct multipart file upload for Excel (.xlsx/.xls) and CSV datasets."""
+    from src.custom_import import parse_and_predict_custom_data
+    try:
+        content_bytes = await file.read()
+        if not content_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+            
+        result = parse_and_predict_custom_data(
+            content=content_bytes,
+            filename=file.filename or "uploaded_battery_data.xlsx",
+            model=sim.model,
+        )
+        df_processed = result.pop("df_processed")
+        sim.custom_df = df_processed
+        sim.custom_title = file.filename or "Uploaded Custom Data"
+        sim.custom_filename = file.filename or "uploaded_data.xlsx"
+        sim.custom_mean_i = float(df_processed["I"].abs().mean())
+        
+        if load_into_twin:
             sim.load_custom_df(df_processed, sim.custom_title, sim.custom_filename)
             
         return result

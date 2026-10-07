@@ -234,3 +234,18 @@ def test_api_sample_xlsx_and_export_excel(client):
     assert "spreadsheetml" in res_exp.headers["content-type"]
     assert len(res_exp.content) > 1000
 
+
+def test_api_upload_file_multipart(client):
+    """Test POST /api/upload-file multipart endpoint with Excel file."""
+    from src.custom_import import generate_sample_excel_template
+    excel_bytes = generate_sample_excel_template(45)
+    files = {"file": ("test_multipart.xlsx", io.BytesIO(excel_bytes), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    data = {"load_into_twin": "false"}
+    res = client.post("/api/upload-file", files=files, data=data)
+    assert res.status_code == 200
+    res_data = res.json()
+    assert res_data["status"] == "success"
+    assert res_data["stats"]["sample_count"] == 45
+    assert len(res_data["series"]["predicted_soc"]) == 45
+
+

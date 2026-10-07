@@ -578,21 +578,27 @@ function setupCustomImport() {
     });
   }
 
+  let lastUploadedRawFile = null;
+
   function handleFileSelection(file) {
+    if (!file) return;
+    lastUploadedRawFile = file;
     lastUploadedFilename = file.name;
     if (fileNameDisplay) {
       fileNameDisplay.innerHTML = `<strong>Selected:</strong> ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
     }
     const isExcel = file.name.toLowerCase().endsWith(".xlsx") || file.name.toLowerCase().endsWith(".xls");
-    const reader = new FileReader();
     if (isExcel) {
+      const reader = new FileReader();
       reader.onload = (evt) => {
         lastUploadedCsvContent = evt.target.result;
-        if (txtRaw) txtRaw.value = `[Excel Spreadsheet: ${file.name} loaded (${(file.size / 1024).toFixed(1)} KB)]\nClick "Predict SOC" to evaluate with Neural Network Digital Twin.`;
+        if (txtRaw) txtRaw.value = "";
+        if (editorContainer) editorContainer.style.display = "none";
         hideAlert();
       };
       reader.readAsDataURL(file);
     } else {
+      const reader = new FileReader();
       reader.onload = (evt) => {
         lastUploadedCsvContent = evt.target.result;
         if (txtRaw) txtRaw.value = lastUploadedCsvContent;
@@ -632,6 +638,7 @@ function setupCustomImport() {
         btnLoadProfile.textContent = "Loading...";
         const res = await fetch("/api/sample-csv");
         const text = await res.text();
+        lastUploadedRawFile = null;
         lastUploadedCsvContent = text;
         lastUploadedFilename = "sample_test_profile.csv";
         if (txtRaw) txtRaw.value = text;
@@ -659,26 +666,46 @@ function setupCustomImport() {
   }
 
   async function runPrediction() {
-    const content = (txtRaw && txtRaw.value.trim()) ? txtRaw.value : lastUploadedCsvContent;
-    if (!content || !content.trim()) {
-      showAlert("Please choose a CSV file or enter data into the editor before predicting.", true);
+    const isExcel = lastUploadedFilename && (lastUploadedFilename.toLowerCase().endsWith(".xlsx") || lastUploadedFilename.toLowerCase().endsWith(".xls"));
+    const autoLoadTwin = $("chk-auto-load-twin") ? $("chk-auto-load-twin").checked : false;
+
+    let content = "";
+    if (isExcel) {
+      content = lastUploadedCsvContent;
+    } else {
+      const textFromEditor = (txtRaw && txtRaw.value.trim()) ? txtRaw.value : "";
+      content = (textFromEditor && !textFromEditor.startsWith("[")) ? textFromEditor : lastUploadedCsvContent;
+    }
+
+    if (!isExcel && (!content || !content.trim())) {
+      showAlert("Please choose a file or enter data into the editor before predicting.", true);
       return;
     }
 
-    const autoLoadTwin = $("chk-auto-load-twin") ? $("chk-auto-load-twin").checked : false;
     btnRun.textContent = "Predicting...";
     btnRun.disabled = true;
 
     try {
-      const res = await fetch("/api/predict-custom", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: lastUploadedFilename,
-          content: content,
-          load_into_twin: autoLoadTwin,
-        }),
-      });
+      let res;
+      if (isExcel && lastUploadedRawFile) {
+        const formData = new FormData();
+        formData.append("file", lastUploadedRawFile);
+        formData.append("load_into_twin", autoLoadTwin);
+        res = await fetch("/api/upload-file", {
+          method: "POST",
+          body: formData,
+        });
+      } else {
+        res = await fetch("/api/predict-custom", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: lastUploadedFilename,
+            content: content,
+            load_into_twin: autoLoadTwin,
+          }),
+        });
+      }
 
       const data = await res.json();
       if (!res.ok) {
