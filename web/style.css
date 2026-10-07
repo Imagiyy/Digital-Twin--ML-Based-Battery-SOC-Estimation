@@ -115,6 +115,11 @@ nav.tab-nav {
   display: flex;
   overflow-x: auto;
   padding: 0 24px;
+  scrollbar-width: none;
+}
+
+nav.tab-nav::-webkit-scrollbar {
+  display: none;
 }
 
 nav.tab-nav button {
@@ -157,9 +162,15 @@ main {
 /* Grid Layouts */
 .grid-2 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+@media (max-width: 900px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
 }
 
 .grid-3 {
@@ -441,7 +452,7 @@ table.data-table th {
   background: var(--bg);
   color: var(--mut);
   font-size: 12px;
-  text-transform: uppercase;
+  text-transform: none;
   font-weight: 600;
 }
 
