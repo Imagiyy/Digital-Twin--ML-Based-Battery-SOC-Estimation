@@ -98,36 +98,58 @@ class SimulationManager:
         
     def _load_cycle(self, cycle_key: str):
         self.cycle_key = cycle_key
-        if cycle_key == "custom" and self.custom_df is not None:
-            df = self.custom_df
-            title = f"Custom: {self.custom_title}"
-        elif cycle_key == "pair10":
-            df = build_cycle_pair(self.dataset["Discharge_10.csv"], self.dataset["Load_10.csv"])
-            title = "Pair 10 (1.0 A Pair)"
-        elif cycle_key == "pair20":
-            df = build_cycle_pair(self.dataset["Discharge_20.csv"], self.dataset["Load_20.csv"])
-            title = "Pair 20 (2.0 A Pair)"
-        elif cycle_key == "pair30":
-            df = build_cycle_pair(self.dataset["Discharge_30.csv"], self.dataset["Load_30.csv"])
-            title = "Pair 30 (3.0 A Pair)"
-        elif cycle_key in ("charge10", "load10"):
-            df = self.dataset["Load_10.csv"]
-            title = "Charge 10 (1.0 A Pure Charge)"
-        elif cycle_key in ("charge20", "load20"):
-            df = self.dataset["Load_20.csv"]
-            title = "Charge 20 (2.0 A Pure Charge)"
-        elif cycle_key in ("charge30", "load30"):
-            df = self.dataset["Load_30.csv"]
-            title = "Charge 30 (3.0 A Pure Charge)"
-        elif cycle_key == "dis02":
-            df = self.dataset["Discharge_02.csv"]
-            title = "Discharge 02 (0.5 A)"
-        elif cycle_key in self.dataset:
-            df = self.dataset[cycle_key]
-            title = cycle_key
-        else:
-            df = build_cycle_pair(self.dataset["Discharge_10.csv"], self.dataset["Load_10.csv"])
-            title = "Pair 10 (1.0 A Pair)"
+        try:
+            if cycle_key == "custom" and self.custom_df is not None:
+                df = self.custom_df
+                title = f"Custom: {self.custom_title}"
+            elif cycle_key == "pair10" and "Discharge_10.csv" in self.dataset and "Load_10.csv" in self.dataset:
+                df = build_cycle_pair(self.dataset["Discharge_10.csv"], self.dataset["Load_10.csv"])
+                title = "Pair 10 (1.0 A Pair)"
+            elif cycle_key == "pair20" and "Discharge_20.csv" in self.dataset and "Load_20.csv" in self.dataset:
+                df = build_cycle_pair(self.dataset["Discharge_20.csv"], self.dataset["Load_20.csv"])
+                title = "Pair 20 (2.0 A Pair)"
+            elif cycle_key == "pair30" and "Discharge_30.csv" in self.dataset and "Load_30.csv" in self.dataset:
+                df = build_cycle_pair(self.dataset["Discharge_30.csv"], self.dataset["Load_30.csv"])
+                title = "Pair 30 (3.0 A Pair)"
+            elif cycle_key in ("charge10", "load10") and "Load_10.csv" in self.dataset:
+                df = self.dataset["Load_10.csv"]
+                title = "Charge 10 (1.0 A Pure Charge)"
+            elif cycle_key in ("charge20", "load20") and "Load_20.csv" in self.dataset:
+                df = self.dataset["Load_20.csv"]
+                title = "Charge 20 (2.0 A Pure Charge)"
+            elif cycle_key in ("charge30", "load30") and "Load_30.csv" in self.dataset:
+                df = self.dataset["Load_30.csv"]
+                title = "Charge 30 (3.0 A Pure Charge)"
+            elif cycle_key == "dis02" and "Discharge_02.csv" in self.dataset:
+                df = self.dataset["Discharge_02.csv"]
+                title = "Discharge 02 (0.5 A)"
+            elif cycle_key in self.dataset:
+                df = self.dataset[cycle_key]
+                title = cycle_key
+            elif "Discharge_10.csv" in self.dataset and "Load_10.csv" in self.dataset:
+                df = build_cycle_pair(self.dataset["Discharge_10.csv"], self.dataset["Load_10.csv"])
+                title = "Pair 10 (1.0 A Pair)"
+            else:
+                dummy_t = np.arange(0, 100, 5)
+                df = pd.DataFrame({
+                    "time": dummy_t,
+                    "V": np.linspace(4.1, 3.5, len(dummy_t)),
+                    "I": np.full(len(dummy_t), 1.0),
+                    "V_avg": np.linspace(4.1, 3.5, len(dummy_t)),
+                    "soc_true": np.linspace(1.0, 0.5, len(dummy_t)),
+                })
+                title = "Synthetic Twin Cell"
+        except Exception as e:
+            print(f"[Twin] Fallback on cycle load: {e}")
+            dummy_t = np.arange(0, 100, 5)
+            df = pd.DataFrame({
+                "time": dummy_t,
+                "V": np.linspace(4.1, 3.5, len(dummy_t)),
+                "I": np.full(len(dummy_t), 1.0),
+                "V_avg": np.linspace(4.1, 3.5, len(dummy_t)),
+                "soc_true": np.linspace(1.0, 0.5, len(dummy_t)),
+            })
+            title = "Synthetic Twin Cell"
             
         self.twin = DigitalTwin(
             cycle_df=df,
@@ -168,6 +190,16 @@ async def get_index():
     if index_file.exists():
         return FileResponse(index_file)
     return HTMLResponse("<h2>SOC Digital Twin Dashboard loading...</h2>")
+
+
+@app.get("/Digital_Twin_dashboard_fixed.html", response_class=HTMLResponse)
+async def get_fixed_dashboard():
+    """Serve standalone static dashboard."""
+    fixed_file = ROOT_DIR / "Digital_Twin_dashboard_fixed.html"
+    if fixed_file.exists():
+        return FileResponse(fixed_file)
+    return FileResponse(WEB_DIR / "index.html")
+
 
 
 @app.get("/favicon.ico", include_in_schema=False)

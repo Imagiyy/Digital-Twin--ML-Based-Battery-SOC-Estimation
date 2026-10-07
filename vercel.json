@@ -1,7 +1,3 @@
 {
-  "cleanUrls": true,
-  "rewrites": [
-    { "source": "/", "destination": "/index.html" },
-    { "source": "/Digital_Twin_dashboard_fixed.html", "destination": "/index.html" }
-  ]
+  "cleanUrls": true
 }
