@@ -40,6 +40,10 @@ env/
 .AppleDouble
 .LSOverride
 
+# Office / LibreOffice lock files
+.~lock.*#
+
+
 # Windows
 Thumbs.db
 ehthumbs.db
