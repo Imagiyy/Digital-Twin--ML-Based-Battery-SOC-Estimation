@@ -550,6 +550,91 @@ async function setupModelExplorer() {
   } catch (err) {
     console.error("Model explorer fetch error:", err);
   }
+
+  // Populate ablation tables
+  try {
+    const res = await fetch("/api/ablations");
+    const data = await res.json();
+    
+    // 1. Architecture Ablation Table
+    const tbodyArch = document.querySelector("#table-ablation-arch tbody");
+    if (tbodyArch && data.architecture) {
+      tbodyArch.innerHTML = "";
+      data.architecture.forEach((row) => {
+        const tr = document.createElement("tr");
+        const isProposed = row["Architecture"].includes("Proposed");
+        if (isProposed) {
+          tr.style.background = "rgba(22, 163, 74, 0.12)";
+          tr.style.fontWeight = "bold";
+        }
+        
+        let roleBadge = `<span style="color:var(--mut);">Baseline</span>`;
+        if (isProposed) {
+          roleBadge = `<span class="pill" style="background:var(--ok);font-size:10px;padding:2px 7px;">Proposed (Elbow)</span>`;
+        } else if (row["Architecture"].includes("Two Layers")) {
+          roleBadge = `<span style="color:var(--mut);font-size:10px;">Over-parameterized</span>`;
+        } else if (row["Architecture"].includes("ReLU")) {
+          roleBadge = `<span style="color:var(--bl);font-size:10px;">C0 Non-smooth</span>`;
+        } else if (row["Architecture"].includes("Sigmoid")) {
+          roleBadge = `<span style="color:var(--mut);font-size:10px;">Slow gradient</span>`;
+        } else if (row["Architecture"].includes("4 units")) {
+          roleBadge = `<span style="color:var(--er);font-size:10px;">Underfitting</span>`;
+        }
+
+        const maeColor = isProposed ? "var(--ok)" : (row["Pair 10 MAE (%)"] <= 2.0 ? "var(--fg)" : "var(--er)");
+        tr.innerHTML = `
+          <td>${row["Architecture"]}</td>
+          <td>${row["Parameters"]}</td>
+          <td style="color:${maeColor};font-weight:700;">${row["Pair 10 MAE (%)"]}%</td>
+          <td>${row["Pair 10 RMSE (%)"]}%</td>
+          <td>${row["Latency (\u00b5s)"]} \u00b5s</td>
+          <td>${roleBadge}</td>
+        `;
+        tbodyArch.appendChild(tr);
+      });
+    }
+
+    // 2. Feature Ablation Table
+    const tbodyFeat = document.querySelector("#table-ablation-feat tbody");
+    if (tbodyFeat && data.features) {
+      tbodyFeat.innerHTML = "";
+      data.features.forEach((row) => {
+        const tr = document.createElement("tr");
+        const isProp = row["Feature Set"].includes("Proposed");
+        if (isProp) {
+          tr.style.background = "rgba(22, 163, 74, 0.12)";
+          tr.style.fontWeight = "bold";
+        }
+        tr.innerHTML = `
+          <td>${row["Feature Set"]}</td>
+          <td>${row["Input Dim"]}</td>
+          <td style="color:${isProp ? 'var(--ok)' : 'var(--fg)'};font-weight:700;">${row["Pair 10 MAE (%)"]}%</td>
+        `;
+        tbodyFeat.appendChild(tr);
+      });
+    }
+
+    // 3. Noise Augmentation Table
+    const tbodyNoise = document.querySelector("#table-ablation-noise tbody");
+    if (tbodyNoise && data.training) {
+      tbodyNoise.innerHTML = "";
+      data.training.forEach((row) => {
+        const tr = document.createElement("tr");
+        const isProp = row["Condition"].includes("Proposed");
+        if (isProp) {
+          tr.style.background = "rgba(22, 163, 74, 0.12)";
+          tr.style.fontWeight = "bold";
+        }
+        tr.innerHTML = `
+          <td>${row["Condition"]}</td>
+          <td style="color:${isProp ? 'var(--ok)' : 'var(--er)'};font-weight:700;">${row["Pair 10 MAE (%)"]}%</td>
+        `;
+        tbodyNoise.appendChild(tr);
+      });
+    }
+  } catch (err) {
+    console.error("Ablations fetch error:", err);
+  }
 }
 
 // ============================================================================

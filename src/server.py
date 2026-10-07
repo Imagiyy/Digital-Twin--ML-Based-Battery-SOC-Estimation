@@ -477,6 +477,23 @@ async def get_results():
     return {"held_out_results": []}
 
 
+@app.get("/api/ablations")
+async def get_ablations():
+    """Return precomputed ablation study tables."""
+    tables_dir = get_path("tables_dir")
+    res = {"architecture": [], "features": [], "training": []}
+    arch_csv = tables_dir / "ablation_architecture.csv"
+    if arch_csv.exists():
+        res["architecture"] = pd.read_csv(arch_csv).to_dict(orient="records")
+    feat_csv = tables_dir / "ablation_features.csv"
+    if feat_csv.exists():
+        res["features"] = pd.read_csv(feat_csv).to_dict(orient="records")
+    train_csv = tables_dir / "ablation_training.csv"
+    if train_csv.exists():
+        res["training"] = pd.read_csv(train_csv).to_dict(orient="records")
+    return res
+
+
 @app.get("/api/export")
 async def export_run_csv():
     """Export current simulation run history as CSV."""
