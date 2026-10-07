@@ -79,7 +79,7 @@ def run_ablations_experiment():
         mlp = MLPRegressor(
             hidden_layer_sizes=layers,
             activation=act,
-            max_iter=30,
+            max_iter=80,
             batch_size=1024,
             random_state=42,
             alpha=0.0001
@@ -88,11 +88,11 @@ def run_ablations_experiment():
         mlp.fit(X_train_norm, y_train)
         fit_time = time.perf_counter() - t0
         
-        # Test inference
+        # Test inference latency per sample in microseconds
         t0_inf = time.perf_counter_ns()
         for _ in range(500):
             _ = mlp.predict(X_test_norm[:10])
-        inf_latency_us = (time.perf_counter_ns() - t0_inf) / 5000.0
+        inf_latency_us = (time.perf_counter_ns() - t0_inf) / (500 * 10 * 1000.0)
         
         preds = np.clip(mlp.predict(X_test_norm), 0.0, 100.0)
         mae = mean_absolute_error(y_test, preds)
@@ -125,7 +125,7 @@ def run_ablations_experiment():
     
     feat_records = []
     for feat_label, idxs in feature_sets:
-        mlp = MLPRegressor(hidden_layer_sizes=(16,), activation="tanh", max_iter=30, batch_size=1024, random_state=42)
+        mlp = MLPRegressor(hidden_layer_sizes=(16,), activation="tanh", max_iter=80, batch_size=1024, random_state=42)
         mlp.fit(X_train_norm[:, idxs], y_train)
         preds = np.clip(mlp.predict(X_test_norm[:, idxs]), 0.0, 100.0)
         mae = mean_absolute_error(y_test, preds)
@@ -147,7 +147,7 @@ def run_ablations_experiment():
     y_train_clean = np.concatenate([df["soc_true"].to_numpy() for df in train_dfs])
     X_train_clean_norm = (X_train_clean - mean_s) / std_s
     
-    mlp_no_aug = MLPRegressor(hidden_layer_sizes=(16,), activation="tanh", max_iter=30, batch_size=1024, random_state=42)
+    mlp_no_aug = MLPRegressor(hidden_layer_sizes=(16,), activation="tanh", max_iter=80, batch_size=1024, random_state=42)
     mlp_no_aug.fit(X_train_clean_norm, y_train_clean)
     pred_no_aug = np.clip(mlp_no_aug.predict(X_test_norm), 0.0, 100.0)
     mae_no_aug = mean_absolute_error(y_test, pred_no_aug)
@@ -175,24 +175,93 @@ def run_ablations_experiment():
         f.write("\n\n### 3. Noise Augmentation Ablation\n\n")
         f.write(train_df.to_markdown(index=False))
         
-    # Plot Architecture Tradeoff
+    # Plot Architecture Tradeoff (Publication-grade 2-Panel Figure)
     figures_dir = get_path("figures_dir")
-    fig, ax1 = plt.subplots(figsize=(9, 5), dpi=300)
-    color = "#8c1236"
-    ax1.set_xlabel("Architecture Configuration", fontsize=11)
-    ax1.set_ylabel("Pair 10 MAE (%)", color=color, fontsize=11)
-    ax1.plot(arch_df["Architecture"], arch_df["Pair 10 MAE (%)"], "o-", color=color, lw=2.0)
-    ax1.tick_params(axis="y", labelcolor=color)
-    ax1.set_xticklabels(arch_df["Architecture"], rotation=30, ha="right", fontsize=9)
-    ax1.grid(True, linestyle="--", alpha=0.5)
+    fig, (ax1, ax3) = plt.subplots(1, 2, figsize=(11.5, 4.8), dpi=300, gridspec_kw={"width_ratios": [1.4, 0.9]})
     
+    # -------------------------------------------------------------
+    # Panel A: Model Capacity Trade-Off (Width & Depth Scaling)
+    # -------------------------------------------------------------
+    cap_indices = [0, 1, 2, 3, 4, 5]
+    cap_df = arch_df.iloc[cap_indices].copy()
+    cap_labels = ["4 units", "8 units", "16 units\n(Proposed)", "32 units", "64 units", "Two Layers\n(16-16)"]
+    
+    color_err = "#8c1236"
+    color_param = "#2563eb"
+    
+    ax1.set_title("(a) Model Capacity vs Parameter Count", fontsize=11, fontweight="bold", pad=12, color="#1e293b")
+    ax1.set_xlabel("Architecture Configuration", fontsize=10, labelpad=8)
+    ax1.set_ylabel("Pair 10 MAE (%)", color=color_err, fontsize=10, fontweight="bold")
+    
+    # Error line & markers
+    x_pos = np.arange(len(cap_labels))
+    ax1.plot(x_pos, cap_df["Pair 10 MAE (%)"], "o-", color=color_err, lw=2.2, markersize=7, zorder=4)
+    # Highlight proposed point (index 2)
+    ax1.scatter([2], [cap_df.iloc[2]["Pair 10 MAE (%)"]], color="#d97706", s=180, edgecolors=color_err, lw=2.5, zorder=5)
+    
+    ax1.annotate(
+        f"Elbow Point\n(81 params, {cap_df.iloc[2]['Pair 10 MAE (%)']:.2f}% MAE)",
+        xy=(2, cap_df.iloc[2]["Pair 10 MAE (%)"]),
+        xytext=(2.2, cap_df.iloc[2]["Pair 10 MAE (%)"] + 1.6),
+        arrowprops=dict(arrowstyle="->", color="#b45309", lw=1.5),
+        fontsize=8.5,
+        fontweight="bold",
+        color="#78350f",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="#fef3c7", edgecolor="#f59e0b", alpha=0.9),
+        zorder=6
+    )
+    
+    ax1.tick_params(axis="y", labelcolor=color_err)
+    ax1.set_xticks(x_pos)
+    ax1.set_xticklabels(cap_labels, fontsize=8.5)
+    ax1.grid(True, linestyle="--", alpha=0.45)
+    ax1.set_ylim(bottom=0.0)
+    
+    # Parameters bar on twin axis
     ax2 = ax1.twinx()
-    color = "#2563eb"
-    ax2.set_ylabel("Trainable Parameters", color=color, fontsize=11)
-    ax2.bar(arch_df["Architecture"], arch_df["Parameters"], color=color, alpha=0.25, width=0.4)
-    ax2.tick_params(axis="y", labelcolor=color)
+    ax2.set_ylabel("Trainable Parameters", color=color_param, fontsize=10, fontweight="bold")
+    ax2.bar(x_pos, cap_df["Parameters"], color=color_param, alpha=0.22, width=0.42, zorder=2)
+    ax2.tick_params(axis="y", labelcolor=color_param)
+    ax2.set_ylim(bottom=0, top=max(cap_df["Parameters"]) * 1.25)
     
-    plt.title("Architecture Trade-Off: Accuracy vs Parameter Count", fontsize=13, fontweight="bold", color="#8c1236")
+    # -------------------------------------------------------------
+    # Panel B: Activation Function Comparison (at 16 units)
+    # -------------------------------------------------------------
+    act_indices = [2, 6, 7]  # 16 tanh, 16 relu, 16 sigmoid
+    act_df = arch_df.iloc[act_indices].copy()
+    act_names = ["Tanh\n(Proposed)", "ReLU", "Sigmoid"]
+    bar_colors = ["#8c1236", "#3b82f6", "#64748b"]
+    
+    ax3.set_title("(b) Activation Function Comparison (16 Units)", fontsize=11, fontweight="bold", pad=12, color="#1e293b")
+    ax3.set_ylabel("Pair 10 MAE (%)", fontsize=10, fontweight="bold", color="#1e293b")
+    bars = ax3.bar(act_names, act_df["Pair 10 MAE (%)"], color=bar_colors, width=0.5, edgecolor="#1e293b", lw=0.8, alpha=0.85)
+    ax3.grid(True, linestyle="--", alpha=0.45, axis="y")
+    ax3.set_ylim(bottom=0.0, top=max(act_df["Pair 10 MAE (%)"]) * 1.35)
+    
+    for bar, val in zip(bars, act_df["Pair 10 MAE (%)"]):
+        ax3.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            val + 0.05,
+            f"{val:.2f}%",
+            ha="center",
+            va="bottom",
+            fontsize=9.5,
+            fontweight="bold",
+            color="#0f172a"
+        )
+        
+    ax3.text(
+        0.5, 0.08,
+        "Tanh selected: C^\u221e smooth Jacobian for EKF\nBounded (-1,1) avoids MCU overflow & dying neurons",
+        ha="center",
+        va="bottom",
+        transform=ax3.transAxes,
+        fontsize=7.8,
+        fontstyle="italic",
+        color="#334155",
+        bbox=dict(boxstyle="round,pad=0.35", facecolor="#f8fafc", edgecolor="#cbd5e1", alpha=0.95)
+    )
+    
     plt.tight_layout()
     fig.savefig(figures_dir / "ablation_architecture.png", dpi=300)
     plt.close(fig)

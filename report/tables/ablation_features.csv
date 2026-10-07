@@ -1,5 +1,5 @@
 Feature Set,Input Dim,Pair 10 MAE (%)
-V Only,1,9.11
-V + I,2,5.43
-V + V_smooth,2,9.11
-V + I + V_smooth (Proposed),3,5.11
+V Only,1,7.32
+V + I,2,1.48
+V + V_smooth,2,6.66
+V + I + V_smooth (Proposed),3,1.19
