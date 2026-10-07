@@ -85,12 +85,12 @@ def run_excel_test(file_path: str, export_path: str = None, plot_path: str = Non
         print(f"  • Maximum Absolute Error    : {max_err:.2f} %")
         print(f"  • Coulomb Counting MAE      : {stats.get('cc_mae', 'N/A')} %")
 
-    print("\n--- PREVIEW: FIRST 5 SAMPLES ---")
+    print(f"\n--- SAMPLES TABLE: ALL {len(preview)} SAMPLES ---")
     preview = result["preview"]
     header = f"{'Row':<6}{'Time(s)':<10}{'Volt(V)':<10}{'Curr(A)':<10}{'V_smooth':<10}{'Pred_SOC(%)':<14}{'True_SOC(%)':<12}"
     print(header)
     print("-" * len(header))
-    for row in preview[:5]:
+    for row in preview:
         print(f"{row['row']:<6}{row['time_s']:<10.1f}{row['voltage']:<10.3f}{row['current']:<10.3f}{row['v_smooth']:<10.3f}{row['predicted_soc']:<14.2f}{str(row['true_soc']):<12}")
 
     # Determine export destination

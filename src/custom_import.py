@@ -375,16 +375,9 @@ def parse_and_predict_custom_data(
         "true_soc": [round(float(soc_true_arr[idx]), 2) if has_ground_truth and not np.isnan(soc_true_arr[idx]) else None for idx in indices],
     }
 
-    # Generate preview table rows (first 5 and last 5)
-    preview_indices = list(range(min(5, n_samples)))
-    if n_samples > 5:
-        tail_start = max(5, n_samples - 5)
-        for idx in range(tail_start, n_samples):
-            if idx not in preview_indices:
-                preview_indices.append(idx)
-
+    # Generate table rows for all samples
     preview_rows = []
-    for idx in preview_indices:
+    for idx in range(n_samples):
         preview_rows.append({
             "row": idx + 1,
             "time_s": round(float(t_arr[idx]), 1),

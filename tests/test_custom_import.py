@@ -148,7 +148,7 @@ def test_api_predict_and_export_endpoints(client):
     assert data["filename"] == "my_test_run.csv"
     assert data["stats"]["sample_count"] == 40
     assert "predicted_soc" in data["series"]
-    assert len(data["preview"]) > 0
+    assert len(data["preview"]) == 40
 
     # 2. Export predictions CSV
     res_exp = client.get("/api/export-custom")

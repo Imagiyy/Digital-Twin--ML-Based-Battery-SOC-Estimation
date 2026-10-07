@@ -902,6 +902,17 @@ function renderCustomPreviewTable(previewRows) {
   const tbody = $("table-custom-preview").querySelector("tbody");
   if (!tbody) return;
   tbody.innerHTML = "";
+
+  const countBadge = $("preview-row-count");
+  if (countBadge) {
+    const n = previewRows ? previewRows.length : 0;
+    countBadge.textContent = `Showing all ${n.toLocaleString()} sample${n === 1 ? "" : "s"}`;
+    countBadge.style.color = "var(--ok)";
+  }
+
+  if (!previewRows || previewRows.length === 0) return;
+
+  const fragment = document.createDocumentFragment();
   previewRows.forEach((row) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -913,8 +924,9 @@ function renderCustomPreviewTable(previewRows) {
       <td style="color:var(--ok);font-weight:700;">${row.predicted_soc} %</td>
       <td>${row.true_soc === "N/A" ? '<span style="color:var(--mut);">N/A</span>' : `<strong>${row.true_soc} %</strong>`}</td>
     `;
-    tbody.appendChild(tr);
+    fragment.appendChild(tr);
   });
+  tbody.appendChild(fragment);
 }
 
 async function refreshCycleList() {
